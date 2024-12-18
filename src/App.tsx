@@ -28,10 +28,10 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
         <a target="_blank">
-          <img src={tauriLogo} className="logo react" alt="React logo" />
+          <img src={tauriLogo} className="logo react" alt="Tauri logo" />
         </a>
         <a target="_blank">
-          <img src={typescriptLogo} className="logo react" alt="React logo" />
+          <img src={typescriptLogo} className="logo react" alt="Typescript logo" />
         </a>
       </div>
       <h1>Vite + React</h1>
