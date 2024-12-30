@@ -48,6 +48,9 @@ function App() {
       </p>
       <button onClick={greet}>Greet</button>
       <p id="greet-msg"></p>
+      <h1 className="text-3xl font-bold underline">
+      Hello world!
+      </h1>
     </>
   )
 }
