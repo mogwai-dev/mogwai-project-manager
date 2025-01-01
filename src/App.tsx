@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 // import { invoke } from "@tauri-apps/api/core";
 
@@ -43,32 +43,30 @@ const TextFieldAndButtonPageComponent: React.FC = () => {
 };
 
 const TablePageComponent: React.FC = () => {
+  // サンプルコード
+  const v: number[][] = [];
+  for (let i = 0; i < 100; i++) {
+    const vv: number[] = [];
+    for (let j = 0; j < 100; j++) {
+      vv.push(j);
+    }
+    v.push(vv);
+  }
+
   return (
     <div>
       <table className="table-fixed">
+        {
+          /*
         <thead>
           <tr>
-            <th>Song</th>
-            <th>Artist</th>
-            <th>Year</th>
+            {some_data[0].}
           </tr>
         </thead>
+        */
+        }
         <tbody>
-          <tr>
-            <td>The Sliding Mr. Bones (Next Stop, Pottersville)</td>
-            <td>Malcolm Lockyer</td>
-            <td>1961</td>
-          </tr>
-          <tr>
-            <td>Witchy Woman</td>
-            <td>The Eagles</td>
-            <td>1972</td>
-          </tr>
-          <tr>
-            <td>Shining Star</td>
-            <td>Earth, Wind, and Fire</td>
-            <td>1975</td>
-          </tr>
+          {v.map((vv) => <tr>{vv.map((d) => <td>{d}</td>)}</tr>)}
         </tbody>
       </table>
     </div>
@@ -209,6 +207,11 @@ const TABS: Tab[] = [
 ];
 
 function App() {
+  // アプリのイニシャライズ
+  useEffect(() => {
+    alert('Hello world!');
+  }, []);
+
   const [selectedTab, setSelectedTab] = useState(0);
   // const [count, setCount] = useState(0);
 
