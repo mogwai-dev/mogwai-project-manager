@@ -1,17 +1,22 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
-// import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
+// import { BaseDirectory, readTextFile } from '@tauri-apps/plugin-fs'
 
-/*
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  alert(
-    await invoke("greet", {
-      name: "ABC",
-    }),
-  );
+
+// 設定ディレクトリ内のファイルをすべて読み込む(*.list と *.table)
+async function get_list_file_names(settingDirPath: string): Promise<string[]> {
+  return await invoke("get_list_file_names", {
+    setting_dir_path: settingDirPath,
+  });
 }
-  */
+
+async function get_table_file_names(settingDirPath: string): Promise<string[]> {
+  return await invoke<string[]>("get_table_file_names", {
+    setting_dir_path: settingDirPath,
+  });
+}
 
 /*
 function sample() {
@@ -207,9 +212,28 @@ const TABS: Tab[] = [
 ];
 
 function App() {
-  // アプリのイニシャライズ
+  // React 18 では useEffect を Strict Mode で実行すると useEffect に設定した関数が 2 回呼ばれてしまう。
+  // その対策として useRef と useEffect を使用して 1 回だけ読み込む
+  const hasRun = useRef(false);
+  const readSettingsDir = async () => { // ファイルを読み込む非同期処理
+    const file_path = await open({
+      multiple: false,
+      directory: true,
+    });
+
+    if (file_path === null) {
+      alert("ディレクトリが選択されませんでした");
+      return;
+    }
+
+    //await get_list_file_names(file_path);
+    //await get_table_file_names(file_path);
+  };
   useEffect(() => {
-    alert('Hello world!');
+    if (!hasRun.current) {
+      hasRun.current = true;
+      readSettingsDir();
+    }
   }, []);
 
   const [selectedTab, setSelectedTab] = useState(0);

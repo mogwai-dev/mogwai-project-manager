@@ -5,6 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open"
+    "dialog:allow-open",
+    "dialog:allow-message",
+    "shell:allow-open",
+    "fs:allow-read-text-file"
   ]
 }
