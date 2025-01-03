@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
+import { Tooltip } from "react-tooltip";
 
 // デバッグ用制御変数
 const SHOW_TABLE_INFO: boolean = true;
@@ -34,7 +35,7 @@ function extract_header_element(
   file_name: string,
   list_text: string,
 ): HeaderElement[] {
-  const lines = list_text.split("\n").map(line => line.trim());
+  const lines = list_text.split("\n").map((line) => line.trim());
   const words_splited_with_comma = lines
     .map<string[]>((v) => v.split(","))
     .map<string[]>((v) => v.map<string>((vv) => vv.trim()));
@@ -53,19 +54,38 @@ function extract_header_element(
 }
 
 // matrix["x.list:1"]["y.list:1"] = 'o' みたいな....
-type Matrix = { [row_key: string]: { [column_key: string]: string } };
+type Matrix = { [row_key: string]: { [column_key: string]: MatrixValue } };
+type MatrixValue = { mark: string; description: string };
 
-function register_arrow(matrix: Matrix, row_key:string, col_key:string, str:string) {
+function register_arrow(
+  matrix: Matrix,
+  row_key: string,
+  col_key: string,
+  description: string,
+  mark: string,
+) {
   if (!matrix[row_key]) {
     matrix[row_key] = {};
   }
 
-  matrix[row_key][col_key] = str;
+  if (!matrix[row_key][col_key]) {
+    matrix[row_key][col_key] = { mark: "", description: "" };
+  }
+
+  matrix[row_key][col_key] = { mark, description };
 }
 
-function get_mark(matrix: Matrix, row_key:string, col_key:string): string {
+function get_mark(
+  matrix: Matrix,
+  row_key: string,
+  col_key: string,
+): MatrixValue {
   if (!matrix[row_key]) {
     matrix[row_key] = {};
+  }
+
+  if (!matrix[row_key][col_key]) {
+    matrix[row_key][col_key] = { mark: "", description: "" };
   }
 
   return matrix[row_key][col_key];
@@ -91,7 +111,7 @@ const generate_table_page = (path: string) => {
       // 先頭のコメントを読み込むが
       // 1 行目は飛ばす
       let read_state: ReadState = ReadState.SkipInitialLine;
-      const splited = text.split("\n").map(line=>line.trim());
+      const splited = text.split("\n").map((line) => line.trim());
       let line_num = 0; // 現在読んでいる行数
       // 現在読んでいる行数が "\n" で分けた行数より大きくなったら終わり
       while (line_num < splited.length) {
@@ -122,10 +142,31 @@ const generate_table_page = (path: string) => {
             const [file_name_right, id_right] = splited_with_space[2].split(
               ":",
             );
+
+            let description;
+            // コメントの抽出(簡易版)
+            if (line.includes("'")) {
+              description = line.slice(line.lastIndexOf("'")).slice(1).trim();
+            } else {
+              description = "";
+            }
+
             if (splited_with_space[1] === "-->") {
-              register_arrow(matrix_tmp, `${file_name_left}:${id_left}`, `${file_name_right}:${id_right}`, "〇");
+              register_arrow(
+                matrix_tmp,
+                `${file_name_left}:${id_left}`,
+                `${file_name_right}:${id_right}`,
+                description,
+                "〇",
+              );
             } else if (splited_with_space[1] === "<--") {
-              register_arrow(matrix_tmp, `${file_name_right}:${id_right}`, `${file_name_left}:${id_left}`, "〇");
+              register_arrow(
+                matrix_tmp,
+                `${file_name_right}:${id_right}`,
+                `${file_name_left}:${id_left}`,
+                description,
+                "〇",
+              );
             }
           }
 
@@ -146,7 +187,6 @@ const generate_table_page = (path: string) => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
       <div className="mx-2">
@@ -158,22 +198,53 @@ const generate_table_page = (path: string) => {
         </label>
         <table className="table-fixed">
           <thead>
-            <tr>
+            <tr key={"header_row_0"}>
               {["(空欄)"].concat(
-                header_elements.map<string>((he) => !SHOW_TABLE_INFO ? he.represent_name: he.file_name + ":" + he.id + ":" + he.represent_name),
-              ).map((e) => <td>{e}</td>)}
+                header_elements.map<string>((he) =>
+                  !SHOW_TABLE_INFO
+                    ? he.represent_name
+                    : he.file_name + ":" + he.id + ":" + he.represent_name
+                ),
+              ).map((e, index) => <td key={`header_row_0_col_${index}`}>{e}
+              </td>)}
             </tr>
           </thead>
           <tbody>
-            {header_elements.map((he_row) => (
-              <tr>
-                <td>{!SHOW_TABLE_INFO ? he_row.represent_name: he_row.file_name + ":" + he_row.id + ":" + he_row.represent_name}</td>
+            {header_elements.map((he_row, index_row) => (
+              <tr key={`content_row_${index_row}`}>
+                <td>
+                  {!SHOW_TABLE_INFO
+                    ? he_row.represent_name
+                    : he_row.file_name + ":" + he_row.id + ":" +
+                      he_row.represent_name}
+                </td>
                 {header_elements.map(
-                  (he_col) => (
-                    <td>
-                      {get_mark(matrix, he_row.file_name + ":" + he_row.id,
-                        he_col.file_name + ":" + he_col.id)
-                       || "-"}
+                  (he_col, index_col) => (
+                    <td
+                      key={`content_row_${index_row}_col_${index_col}`}
+                      {...(get_mark(
+                          matrix,
+                          he_row.file_name + ":" + he_row.id,
+                          he_col.file_name + ":" + he_col.id,
+                        ).description !== ""
+                        ? {
+                          "data-tooltip-id": "td-tooltip",
+                          "data-tooltip-content": `${
+                            get_mark(
+                              matrix,
+                              he_row.file_name + ":" + he_row.id,
+                              he_col.file_name + ":" + he_col.id,
+                            ).description
+                          } ※ダブルクリックで編集できます`,
+                        }
+                        : "")}
+                    >
+                      {get_mark(
+                        matrix,
+                        he_row.file_name + ":" + he_row.id,
+                        he_col.file_name + ":" + he_col.id,
+                      ).mark ||
+                        "-"}
                     </td>
                   ),
                 )}
@@ -181,6 +252,7 @@ const generate_table_page = (path: string) => {
             ))}
           </tbody>
         </table>
+        <Tooltip id="td-tooltip" />
       </div>
     );
   };
