@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import generate_table_page from "./TablePage";
+import generate_list_page from "./ListPage";
 
 // 設定ディレクトリ内のファイルをすべて読み込む(*.list と *.table)
 async function get_list_file_names(settingDirPath: string): Promise<string[]> {
@@ -17,93 +19,6 @@ async function get_table_file_names(settingDirPath: string): Promise<string[]> {
   return await invoke<string[]>("get_table_file_names", {
     settingDirPath,
   });
-}
-
-function create_text_field_and_button_page_component(
-  text: string,
-  path: string,
-): React.FC {
-  return () => {
-    const [textarea_value, set_textarea_value] = useState(text);
-    const [last_textarea_value, set_last_textarea_value] = useState(text); // 最後にセーブボタンを押された文字列
-
-    const has_difference = textarea_value !== last_textarea_value;
-
-    const class_when_has_diff = has_difference ? "border-orange-300" : "border-gray-300";
-    const button_class_when_has_diff = has_difference ? "bg-orange-500 hover:bg-orange-700" : "bg-gray-500"
-    
-
-    return (
-      <div className="mx-2">
-        <label
-          htmlFor="message"
-          className="block my-1 text-sm font-medium text-gray-900 dark:text-white"
-        >
-          {path}
-        </label>
-        <textarea
-          id="message"
-          rows={4}
-          className={`block my-2 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${class_when_has_diff} focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500`}
-          placeholder={textarea_value}
-          value={textarea_value}
-          onChange={(e) => {
-            set_textarea_value(e.target.value);
-          }}
-        >
-        </textarea>
-        <button 
-          disabled={!has_difference}
-          className={`my-1 ${button_class_when_has_diff} text-white font-bold py-1 px-2 rounded-full text-sm`}
-          onClick={async () => {
-            set_last_textarea_value(textarea_value);
-            await writeTextFile(path, textarea_value);
-          }}
-          >
-          save
-        </button>
-      </div>
-    );
-  };
-}
-
-function create_table_page_component(path: string): React.FC {
-  return () => {
-    // サンプルコード
-    const v: number[][] = [];
-    for (let i = 0; i < 100; i++) {
-      const vv: number[] = [];
-      for (let j = 0; j < 100; j++) {
-        vv.push(j);
-      }
-      v.push(vv);
-    }
-
-    return (
-      <div className="mx-2">
-        <label
-          htmlFor="message"
-          className="block my-1 text-sm font-medium text-gray-900 dark:text-white"
-        >
-          {path}
-        </label>
-        <table className="table-fixed">
-          {
-            /*
-          <thead>
-            <tr>
-              {some_data[0].}
-            </tr>
-          </thead>
-          */
-          }
-          <tbody>
-            {v.map((vv) => <tr>{vv.map((d) => <td>{d}</td>)}</tr>)}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
 }
 
 const ACTIV_LI_A_CLASS: string =
@@ -130,7 +45,7 @@ function App() {
   // React 18 では useEffect を Strict Mode で実行すると useEffect に設定した関数が 2 回呼ばれてしまう。
   // その対策として useRef と useEffect を使用して 1 回だけ読み込む
   const hasRun = useRef(false);
-  const readSettingsDir = async () => { // ファイルを読み込む非同期処理
+  const initialize = async () => { // ファイルを読み込む非同期処理
     const file_path = await open({
       multiple: false,
       directory: true,
@@ -153,7 +68,7 @@ function App() {
         represent_name: "list",
         svg_path_d:
           "M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 13a8.949 8.949 0 0 1-4.951-1.488A3.987 3.987 0 0 1 9 13h2a3.987 3.987 0 0 1 3.951 3.512A8.949 8.949 0 0 1 10 18Z",
-        Page: create_text_field_and_button_page_component(text, path),
+        Page: generate_list_page(text, path),
       });
     }
 
@@ -167,7 +82,7 @@ function App() {
         represent_name: "table",
         svg_path_d:
           "M16 1h-3.278A1.992 1.992 0 0 0 11 0H7a1.993 1.993 0 0 0-1.722 1H2a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2Zm-3 14H5a1 1 0 0 1 0-2h8a1 1 0 0 1 0 2Zm0-4H5a1 1 0 0 1 0-2h8a1 1 0 1 1 0 2Zm0-5H5a1 1 0 0 1 0-2h2V2h4v2h2a1 1 0 1 1 0 2Z",
-        Page: create_table_page_component(path),
+        Page: generate_table_page(path),
       });
     }
     // 可能な限り 1 回で配列を更新
@@ -176,7 +91,7 @@ function App() {
   useEffect(() => {
     if (!hasRun.current) {
       hasRun.current = true;
-      readSettingsDir();
+      initialize();
     }
     // useEffect で depecndency を空の配列にすると eslint の影響で warning が出てしまう。これを回避するために
     // 下記行を指定して warning を消す
