@@ -8,6 +8,7 @@
     "dialog:allow-open",
     "dialog:allow-message",
     "shell:allow-open",
-    "fs:allow-read-text-file"
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file"
   ]
 }
