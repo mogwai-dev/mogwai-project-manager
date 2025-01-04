@@ -24,10 +24,29 @@ async function join_path(dirPath: string, fileName: string): Promise<string> {
   return ret;
 }
 
-interface HeaderElement {
+class HeaderElement {
   file_name: string;
   id: string; // unique な数値
   represent_name: string; // 表示する名前
+
+  constructor(file_name: string, id: string, represent_name: string) {
+    this.file_name = file_name;
+    this.id = id;
+    this.represent_name = represent_name;
+  }
+
+  matrix_key(): string {
+    return `${this.file_name}:${this.id}`;
+  }
+
+  debug_repr(): string {
+    return `${this.file_name}:${this.id}:${this.represent_name}`;
+  }
+
+  // ヘッダーに表示される文字列を取得する
+  repr(): string {
+    return !SHOW_TABLE_INFO ? this.represent_name : this.debug_repr();
+  }
 }
 
 // ヘッダーとなる部分を抽出する
@@ -43,52 +62,63 @@ function extract_header_element(
   const id_and_key: HeaderElement[] = words_splited_with_comma.map<
     HeaderElement
   >((v) => {
-    return {
-      file_name,
-      id: v[0],
-      represent_name: v[v.length - 1],
-    };
+    return new HeaderElement(
+      file_name, // file_name
+      v[0], // id
+      v[v.length - 1], // represent_name
+    );
   });
 
   return id_and_key;
 }
 
 // matrix["x.list:1"]["y.list:1"] = 'o' みたいな....
-type Matrix = { [row_key: string]: { [column_key: string]: MatrixValue } };
 type MatrixValue = { mark: string; description: string };
 
-function register_arrow(
-  matrix: Matrix,
-  row_key: string,
-  col_key: string,
-  description: string,
-  mark: string,
-) {
-  if (!matrix[row_key]) {
-    matrix[row_key] = {};
+class Matrix {
+  matrix: { [row_key: string]: { [column_key: string]: MatrixValue } };
+
+  constructor() {
+    this.matrix = {};
   }
 
-  if (!matrix[row_key][col_key]) {
-    matrix[row_key][col_key] = { mark: "", description: "" };
+  register_arrow(
+    file_name_from: string,
+    id_from: string,
+    file_name_to: string,
+    id_to: string,
+    description: string,
+    mark: string,
+  ) {
+    if (!this.matrix[`${file_name_from}:${id_from}`]) {
+      this.matrix[`${file_name_from}:${id_from}`] = {};
+    }
+
+    if (!this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`]) {
+      this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`] =
+        { mark: "", description: "" };
+    }
+
+    this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`] = {
+      mark,
+      description,
+    };
   }
 
-  matrix[row_key][col_key] = { mark, description };
-}
+  get_matrix_value(
+    key_from: string,
+    key_to: string,
+  ): MatrixValue {
+    if (!this.matrix[key_from]) {
+      this.matrix[key_from] = {};
+    }
 
-function get_mark(
-  matrix: Matrix,
-  row_key: string,
-  col_key: string,
-): MatrixValue {
-  if (!matrix[row_key]) {
-    matrix[row_key] = {};
+    if (!this.matrix[key_from][key_to]) {
+      this.matrix[key_from][key_to] = { mark: "", description: "" };
+    }
+
+    return this.matrix[key_from][key_to];
   }
-
-  if (!matrix[row_key][col_key]) {
-    matrix[row_key][col_key] = { mark: "", description: "" };
-  }
-
-  return matrix[row_key][col_key];
 }
 
 enum ReadState {
@@ -100,12 +130,12 @@ enum ReadState {
 const generate_table_page = (path: string) => {
   return () => {
     const [header_elements, set_header_element] = useState<HeaderElement[]>([]);
-    const [matrix, set_matrix] = useState<Matrix>({});
+    const [matrix, set_matrix] = useState<Matrix>(new Matrix());
 
     const hasRun = useRef(false);
     const initialize = async () => {
       let header_element_tmp: HeaderElement[] = [];
-      const matrix_tmp: Matrix = {};
+      const matrix_tmp: Matrix = new Matrix();
 
       const text = await readTextFile(path);
       // 先頭のコメントを読み込むが
@@ -152,18 +182,20 @@ const generate_table_page = (path: string) => {
             }
 
             if (splited_with_space[1] === "-->") {
-              register_arrow(
-                matrix_tmp,
-                `${file_name_left}:${id_left}`,
-                `${file_name_right}:${id_right}`,
+              matrix_tmp.register_arrow(
+                file_name_left,
+                id_left,
+                file_name_right,
+                id_right,
                 description,
                 "〇",
               );
             } else if (splited_with_space[1] === "<--") {
-              register_arrow(
-                matrix_tmp,
-                `${file_name_right}:${id_right}`,
-                `${file_name_left}:${id_left}`,
+              matrix_tmp.register_arrow(
+                file_name_right,
+                id_right,
+                file_name_left,
+                id_left,
                 description,
                 "〇",
               );
@@ -184,7 +216,7 @@ const generate_table_page = (path: string) => {
         initialize();
       }
 
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
@@ -200,59 +232,52 @@ const generate_table_page = (path: string) => {
           <thead>
             <tr key={"header_row_0"}>
               {["(空欄)"].concat(
-                header_elements.map<string>((he) =>
-                  !SHOW_TABLE_INFO
-                    ? he.represent_name
-                    : he.file_name + ":" + he.id + ":" + he.represent_name
-                ),
-              ).map((e, index) => <td key={`header_row_0_col_${index}`}>{e}
+                header_elements.map<string>((he) => he.repr()),
+              ).map((e, index) => 
+              <td key={`header_row_0_col_${index}`}>
+                {e}
               </td>)}
             </tr>
           </thead>
           <tbody>
             {header_elements.map((he_row, index_row) => (
               <tr key={`content_row_${index_row}`}>
-                <td>
-                  {!SHOW_TABLE_INFO
-                    ? he_row.represent_name
-                    : he_row.file_name + ":" + he_row.id + ":" +
-                      he_row.represent_name}
+                <td key={`header_row_${index_row}_col_0`}>
+                  {he_row.repr()}
                 </td>
                 {header_elements.map(
                   (he_col, index_col) => (
                     <td
                       key={`content_row_${index_row}_col_${index_col}`}
-                      {...(get_mark(
-                          matrix,
-                          he_row.file_name + ":" + he_row.id,
-                          he_col.file_name + ":" + he_col.id,
+                      {...(matrix.get_matrix_value(
+                          he_row.matrix_key(),
+                          he_col.matrix_key(),
                         ).description !== ""
                         ? {
                           "data-tooltip-id": "td-tooltip",
                           "data-tooltip-content": `${
-                            get_mark(
-                              matrix,
-                              he_row.file_name + ":" + he_row.id,
-                              he_col.file_name + ":" + he_col.id,
+                            matrix.get_matrix_value(
+                              he_row.matrix_key(),
+                              he_col.matrix_key(),
                             ).description
                           } ※ダブルクリックで編集できます`,
                         }
                         : "")}
                     >
-                      {get_mark(
-                        matrix,
-                        he_row.file_name + ":" + he_row.id,
-                        he_col.file_name + ":" + he_col.id,
+                      {matrix.get_matrix_value(
+                        he_row.matrix_key(),
+                        he_col.matrix_key(),
                       ).mark ||
                         "-"}
                     </td>
+                    
                   ),
                 )}
               </tr>
             ))}
           </tbody>
         </table>
-        <Tooltip id="td-tooltip" />
+        <Tooltip id={"td-tooltip"} />
       </div>
     );
   };
