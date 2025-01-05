@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { Tooltip } from "react-tooltip";
 
@@ -22,6 +22,32 @@ async function join_path(dirPath: string, fileName: string): Promise<string> {
   });
 
   return ret;
+}
+
+async function write_to_tablefile(matrix: Matrix, read_file_info: ReadFileInfo) {
+  let write_content = "' リストファイル一覧\n";
+  
+  for (const read_file_name of read_file_info.read_list_file_names ) {
+    write_content += `' ${read_file_name} \n`;
+  }
+
+  // 空行
+  write_content += '\n';
+
+  for (const row_key in matrix.matrix) {
+
+    for ( const col_key in matrix.matrix[row_key]) {
+
+      if (matrix.matrix[row_key][col_key].mark !== '-' && matrix.matrix[row_key][col_key].mark !== '') {
+        write_content += `${row_key} --> ${col_key} ' ${matrix.matrix[row_key][col_key].description.replace('\r\n', ' ').replace('\n', ' ')}\n`
+      }
+
+    }
+
+  }
+
+  await writeTextFile(read_file_info.read_table_file_path, write_content);
+
 }
 
 class HeaderElement {
@@ -180,6 +206,11 @@ interface DblClickedData {
   key_col: string;
 }
 
+interface ReadFileInfo {
+  read_table_file_path: string;
+  read_list_file_names: string[];
+}
+
 const generate_table_page = (path: string) => {
   return () => {
     /* 状態管理 */
@@ -190,6 +221,13 @@ const generate_table_page = (path: string) => {
     >(undefined);
     const [dblclicked_tooltip_description, set_dblclicked_tooltip_description] =
       useState<string>("");
+
+    // initialize 関数内で初期化が行われる
+    const [read_file_info, set_read_file_info] = useState<ReadFileInfo>({
+      read_table_file_path: "",
+      read_list_file_names: [],
+    })
+    
     // 変更ハンドラーを定義します
     const dblclicked_tooltip_description_change = (
       e: React.ChangeEvent<HTMLInputElement>,
@@ -213,6 +251,11 @@ const generate_table_page = (path: string) => {
       const matrix_tmp: Matrix = new Matrix();
 
       const text = await readTextFile(path);
+
+      // path を保存しておく
+      const read_table_file_path = path;
+      const read_list_file_names = [];
+
       // 先頭のコメントを読み込むが
       // 1 行目は飛ばす
       let read_state: ReadState = ReadState.SkipInitialLine;
@@ -227,7 +270,8 @@ const generate_table_page = (path: string) => {
           line_num += 1;
         } else if (read_state === ReadState.ReadFileName) {
           if (line.startsWith("'")) {
-            const file_name = line.slice(1).trim();
+            const file_name = line.slice(1).trim(); // 1 文字目以降を取得
+            read_list_file_names.push(file_name)
             const dir_name = await get_dir(path);
             const file_path = await join_path(dir_name, file_name);
 
@@ -283,6 +327,10 @@ const generate_table_page = (path: string) => {
 
       set_header_element([...header_elements, ...header_element_tmp]);
       set_matrix(matrix_tmp);
+      set_read_file_info({
+        read_table_file_path,
+        read_list_file_names
+      })
     };
 
     useEffect(() => {
@@ -429,6 +477,11 @@ const generate_table_page = (path: string) => {
               </div>
             </Tooltip>
           )}
+          <button onClick={async () => {
+            await write_to_tablefile(matrix, read_file_info);
+          }}>
+            保存
+          </button>
       </div>
     );
   };
