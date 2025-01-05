@@ -75,7 +75,7 @@ function App() {
     const table_file_name = await get_table_file_names(file_path);
 
     for (const path of table_file_name) {
-      const text = await readTextFile(
+      await readTextFile(
         path,
       );
       tabs_tmp.push({

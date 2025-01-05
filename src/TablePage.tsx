@@ -354,7 +354,7 @@ const generate_table_page = (path: string) => {
               {["(空欄)"].concat(
                 header_elements.map<string>((he) => he.repr()),
               ).map((e, index) => (
-                <td key={`header_row_0_col_${index}`}>
+                <td key={`header_row_0_col_${index}`} className="border">
                   {e}
                 </td>
               ))}
@@ -363,13 +363,14 @@ const generate_table_page = (path: string) => {
           <tbody>
             {header_elements.map((he_row, index_row) => (
               <tr key={`content_row_${index_row}`}>
-                <td key={`header_row_${index_row}_col_0`}>
+                <td key={`header_row_${index_row}_col_0`} className="border">
                   {he_row.repr()}
                 </td>
                 {header_elements.map(
                   (he_col, index_col) => (
                     <td
                       key={`content_row_${index_row}_col_${index_col}`}
+                      className="border text-center"
                       onDoubleClick={() => {
                         set_dblclick_tooltip_id(
                           {
