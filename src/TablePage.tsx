@@ -94,7 +94,9 @@ class Matrix {
       this.matrix[`${file_name_from}:${id_from}`] = {};
     }
 
-    if (!this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`]) {
+    if (
+      !this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`]
+    ) {
       this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`] =
         { mark: "", description: "" };
     }
@@ -127,10 +129,54 @@ enum ReadState {
   ReadArrow,
 }
 
+function sample(
+  dblclick_tooltip_id: DblClickedData | undefined,
+  index_row: number,
+  index_col: number,
+  matrix: Matrix,
+  he_row: HeaderElement,
+  he_col: HeaderElement,
+): { [key: string]: string } {
+  if (dblclick_tooltip_id === undefined) {
+    return {
+      "data-tooltip-id": "td-tooltip",
+      "data-tooltip-content": `${
+        matrix.get_matrix_value(
+          he_row.matrix_key(),
+          he_col.matrix_key(),
+        ).description
+      } ※ダブルクリックで編集できます`,
+    };
+  } else {
+    return {
+      "data-tooltip-id": `content_row_${index_row}_col_${index_col}`,
+    };
+  }
+}
+
+interface DblClickedData {
+  id: string;
+  mark: string;
+  description: string;
+  key_row: string;
+  key_col: string;
+}
+
 const generate_table_page = (path: string) => {
   return () => {
+    /* 状態管理 */
     const [header_elements, set_header_element] = useState<HeaderElement[]>([]);
     const [matrix, set_matrix] = useState<Matrix>(new Matrix());
+    const [dblclicked_tooltip_data, set_dblclick_tooltip_id] = useState<
+      DblClickedData | undefined
+    >(undefined);
+    const [dblclicked_tooltip_description, set_dblclicked_tooltip_description] = useState<string>("");
+    // 変更ハンドラーを定義します
+    const dblclicked_tooltip_description_change = (e: React.ChangeEvent<HTMLInputElement>) => { set_dblclicked_tooltip_description(e.target.value); };
+
+    const [dblclicked_tooltip_mark, set_dblclicked_tooltip_mark] = useState<string>("");
+
+    const dblclicked_tooltip_mark_change = (e: React.ChangeEvent<HTMLSelectElement>) => { set_dblclicked_tooltip_mark(e.target.value); };
 
     const hasRun = useRef(false);
     const initialize = async () => {
@@ -216,14 +262,15 @@ const generate_table_page = (path: string) => {
         initialize();
       }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    console.log(dblclicked_tooltip_data === undefined ? "undefined": dblclicked_tooltip_data.id)
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
       <div className="mx-2">
         <label
-          htmlFor="message"
           className="block my-1 text-sm font-medium text-gray-900 dark:text-white"
         >
           {path}
@@ -233,10 +280,11 @@ const generate_table_page = (path: string) => {
             <tr key={"header_row_0"}>
               {["(空欄)"].concat(
                 header_elements.map<string>((he) => he.repr()),
-              ).map((e, index) => 
-              <td key={`header_row_0_col_${index}`}>
-                {e}
-              </td>)}
+              ).map((e, index) => (
+                <td key={`header_row_0_col_${index}`}>
+                  {e}
+                </td>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -249,19 +297,38 @@ const generate_table_page = (path: string) => {
                   (he_col, index_col) => (
                     <td
                       key={`content_row_${index_row}_col_${index_col}`}
+                      onDoubleClick={() => {
+                        set_dblclick_tooltip_id(
+                          {
+                            id: `content_row_${index_row}_col_${index_col}`,
+                            mark: matrix.get_matrix_value(
+                              he_row.matrix_key(),
+                              he_col.matrix_key(),
+                            ).mark ||
+                              "-",
+                            description: `${
+                              matrix.get_matrix_value(
+                                he_row.matrix_key(),
+                                he_col.matrix_key(),
+                              ).description
+                            }`,
+                            key_row: he_row.matrix_key(),
+                            key_col: he_col.matrix_key(),
+                          },
+                        );
+                      }}
                       {...(matrix.get_matrix_value(
                           he_row.matrix_key(),
                           he_col.matrix_key(),
                         ).description !== ""
-                        ? {
-                          "data-tooltip-id": "td-tooltip",
-                          "data-tooltip-content": `${
-                            matrix.get_matrix_value(
-                              he_row.matrix_key(),
-                              he_col.matrix_key(),
-                            ).description
-                          } ※ダブルクリックで編集できます`,
-                        }
+                        ? sample(
+                          dblclicked_tooltip_data,
+                          index_row,
+                          index_col,
+                          matrix,
+                          he_row,
+                          he_col,
+                        )
                         : "")}
                     >
                       {matrix.get_matrix_value(
@@ -270,14 +337,70 @@ const generate_table_page = (path: string) => {
                       ).mark ||
                         "-"}
                     </td>
-                    
                   ),
                 )}
               </tr>
             ))}
           </tbody>
         </table>
-        <Tooltip id={"td-tooltip"} />
+        {dblclicked_tooltip_data === undefined ? <Tooltip id={"td-tooltip"} /> : (
+          <Tooltip
+            id={dblclicked_tooltip_data.id}
+            isOpen={true}
+            clickable={true}
+          >
+            <label
+              htmlFor="line_selection"
+              className="block text-sm font-light text-white dark:text-white"
+            >
+              影響状態
+            </label>
+            <select
+              id="line_selection"
+              className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+              defaultValue={dblclicked_tooltip_data.mark}
+              onChange={dblclicked_tooltip_mark_change}
+            >
+              <option value="〇">〇</option>
+              <option value="-">-</option>
+            </select>
+            <label
+              htmlFor="description-input"
+              className="block text-sm font-light text-white dark:text-white"
+            >
+              説明
+            </label>
+            <input
+              type="text"
+              id="description-input"
+              className="block w-full text-gray-900 border border-gray-300 rounded-lg bg-gray-50 text-xs focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+              defaultValue={dblclicked_tooltip_data.description}
+              onChange={dblclicked_tooltip_description_change}
+            />
+
+            <div className="mt-2 inline-flex justify-center">
+              <button
+                onClick={() => {
+                  set_dblclick_tooltip_id(undefined); // ツールチップを戻す
+                }}
+                className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
+              >
+                破棄して閉じる
+              </button>
+              <button
+                onClick={() => {
+                  set_dblclick_tooltip_id(undefined); // ツールチップを戻す
+                  matrix.get_matrix_value(dblclicked_tooltip_data.key_row, dblclicked_tooltip_data.key_col).mark = dblclicked_tooltip_mark;
+                  matrix.get_matrix_value(dblclicked_tooltip_data.key_row, dblclicked_tooltip_data.key_col).description = dblclicked_tooltip_description;
+                  set_matrix(matrix)
+                }}
+                className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
+              >
+                保存して閉じる
+              </button>
+            </div>
+          </Tooltip>
+        )}
       </div>
     );
   };
