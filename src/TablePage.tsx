@@ -262,10 +262,8 @@ const generate_table_page = (path: string) => {
         initialize();
       }
 
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    console.log(dblclicked_tooltip_data === undefined ? "undefined": dblclicked_tooltip_data.id)
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
