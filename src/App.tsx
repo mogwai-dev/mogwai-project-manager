@@ -21,6 +21,12 @@ async function get_table_file_names(settingDirPath: string): Promise<string[]> {
   });
 }
 
+async function get_file_name_from_path(path: string): Promise<string> {
+  return await invoke<string>("get_file_name_from_path", {
+    path
+  });
+}
+
 const ACTIV_LI_A_CLASS: string =
   "inline-flex items-center justify-center p-4 border-b-2 text-blue-600 border-blue-600 rounded-t-lg active dark:text-blue-500 dark:border-blue-500 group";
 const DEACTIV_LI_A_CLASS: string =
@@ -65,7 +71,7 @@ function App() {
         path, /* { baseDir: BaseDirectory.AppConfig } */
       );
       tabs_tmp.push({
-        represent_name: "list",
+        represent_name: await get_file_name_from_path(path),
         svg_path_d:
           "M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 13a8.949 8.949 0 0 1-4.951-1.488A3.987 3.987 0 0 1 9 13h2a3.987 3.987 0 0 1 3.951 3.512A8.949 8.949 0 0 1 10 18Z",
         Page: generate_list_page(text, path),
@@ -79,7 +85,7 @@ function App() {
         path,
       );
       tabs_tmp.push({
-        represent_name: "table",
+        represent_name: await get_file_name_from_path(path),
         svg_path_d:
           "M16 1h-3.278A1.992 1.992 0 0 0 11 0H7a1.993 1.993 0 0 0-1.722 1H2a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2Zm-3 14H5a1 1 0 0 1 0-2h8a1 1 0 0 1 0 2Zm0-4H5a1 1 0 0 1 0-2h8a1 1 0 1 1 0 2Zm0-5H5a1 1 0 0 1 0-2h2V2h4v2h2a1 1 0 1 1 0 2Z",
         Page: generate_table_page(path),
