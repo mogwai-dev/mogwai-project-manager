@@ -62,6 +62,22 @@ fn get_table_file_names(setting_dir_path: &str) -> Vec<String> {
     return ret;
 }
 
+
+#[tauri::command]
+fn get_file_name_from_path(path: &str) -> String {
+    let path = Path::new(path);
+    let mut s: String = String::from("");
+    if let Some(file_name) = path.file_name() {
+        if let Some(file_name_str) = file_name.to_str() {
+            s = String::from(file_name_str);
+        } else {
+        }
+    } else {
+
+    }
+    s
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -73,6 +89,7 @@ pub fn run() {
             get_table_file_names,
             get_dir,
             join_path,
+            get_file_name_from_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
