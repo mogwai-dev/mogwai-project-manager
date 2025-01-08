@@ -24,30 +24,34 @@ async function join_path(dirPath: string, fileName: string): Promise<string> {
   return ret;
 }
 
-async function write_to_tablefile(matrix: Matrix, read_file_info: ReadFileInfo) {
+async function write_to_tablefile(
+  matrix: Matrix,
+  read_file_info: ReadFileInfo,
+) {
   let write_content = "' リストファイル一覧\n";
-  
-  for (const read_file_name of read_file_info.read_list_file_names ) {
+
+  for (const read_file_name of read_file_info.read_list_file_names) {
     write_content += `' ${read_file_name} \n`;
   }
 
   // 空行
-  write_content += '\n';
+  write_content += "\n";
 
   for (const row_key in matrix.matrix) {
-
-    for ( const col_key in matrix.matrix[row_key]) {
-
-      if (matrix.matrix[row_key][col_key].mark !== '-' && matrix.matrix[row_key][col_key].mark !== '') {
-        write_content += `${row_key} --> ${col_key} ' ${matrix.matrix[row_key][col_key].description.replace('\r\n', ' ').replace('\n', ' ')}\n`
+    for (const col_key in matrix.matrix[row_key]) {
+      if (
+        matrix.matrix[row_key][col_key].mark !== "-" &&
+        matrix.matrix[row_key][col_key].mark !== ""
+      ) {
+        write_content += `${row_key} --> ${col_key} ' ${
+          matrix.matrix[row_key][col_key].description.replace("\r\n", " ")
+            .replace("\n", " ")
+        }\n`;
       }
-
     }
-
   }
 
   await writeTextFile(read_file_info.read_table_file_path, write_content);
-
 }
 
 class HeaderElement {
@@ -66,7 +70,7 @@ class HeaderElement {
   }
 
   debug_repr(): string {
-    return `${this.file_name}:${this.id}:${this.represent_name}`;
+    return `${this.id}:${this.represent_name}`;
   }
 
   // ヘッダーに表示される文字列を取得する
@@ -167,11 +171,13 @@ function get_content_td_attr(
   index_col: number,
 ): { [attr_key: string]: string } {
   if (
-    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark === "" ||
-    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark === "-"
+    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark ===
+      "" ||
+    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark ===
+      "-"
   ) {
     if (dblclicked_tooltip_data === undefined) {
-      return { };
+      return {};
     } else {
       // ダブルクリックされた td が存在する
       return {
@@ -197,6 +203,7 @@ function get_content_td_attr(
     }
   }
 }
+
 
 interface DblClickedData {
   id: string;
@@ -226,8 +233,8 @@ const generate_table_page = (path: string) => {
     const [read_file_info, set_read_file_info] = useState<ReadFileInfo>({
       read_table_file_path: "",
       read_list_file_names: [],
-    })
-    
+    });
+
     // 変更ハンドラーを定義します
     const dblclicked_tooltip_description_change = (
       e: React.ChangeEvent<HTMLInputElement>,
@@ -271,7 +278,7 @@ const generate_table_page = (path: string) => {
         } else if (read_state === ReadState.ReadFileName) {
           if (line.startsWith("'")) {
             const file_name = line.slice(1).trim(); // 1 文字目以降を取得
-            read_list_file_names.push(file_name)
+            read_list_file_names.push(file_name);
             const dir_name = await get_dir(path);
             const file_path = await join_path(dir_name, file_name);
 
@@ -329,8 +336,8 @@ const generate_table_page = (path: string) => {
       set_matrix(matrix_tmp);
       set_read_file_info({
         read_table_file_path,
-        read_list_file_names
-      })
+        read_list_file_names,
+      });
     };
 
     useEffect(() => {
@@ -342,6 +349,77 @@ const generate_table_page = (path: string) => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // あらかじめ、HeaderElement から ファイルを抽出しておく
+    const file_name_header_elem: { [file_name: string]: HeaderElement[] } = {};
+
+    for (const he of header_elements) {
+      if (!file_name_header_elem[he.file_name]) {
+        file_name_header_elem[he.file_name] = [];
+      }
+      file_name_header_elem[he.file_name].push(he);
+    }
+
+    // tbody を生成
+    const table_content = [];
+    let sum = 0;
+    for (const file_name in file_name_header_elem) {
+      for (const index in file_name_header_elem[file_name]) {
+          table_content.push(
+            <tr>
+              { index === "0" ? 
+              <td className="border text-center" rowSpan={file_name_header_elem[file_name].length}>
+                {file_name}
+              </td>:
+              ""
+              }
+              <td className="border text-center">{file_name_header_elem[file_name][index].repr()}</td>
+              {header_elements.map((he_col, index_col) => (
+                <td
+                  key={`content_row_${sum}_col_${index_col}`}
+                  className="border text-center"
+                  onDoubleClick={() => {
+                    set_dblclick_tooltip_id(
+                      {
+                        id: `content_row_${file_name_header_elem[file_name][index]}_col_${index_col}`,
+                        mark: matrix.get_matrix_value(
+                          file_name_header_elem[file_name][index].matrix_key(),
+                          he_col.matrix_key(),
+                        ).mark ||
+                          "-",
+                        description: `${
+                          matrix.get_matrix_value(
+                            file_name_header_elem[file_name][index].matrix_key(),
+                            he_col.matrix_key(),
+                          ).description
+                        }`,
+                        key_row: file_name_header_elem[file_name][index].matrix_key(),
+                        key_col: he_col.matrix_key(),
+                      },
+                    );
+                  }}
+                  {...get_content_td_attr(
+                    matrix,
+                    file_name_header_elem[file_name][index],
+                    he_col,
+                    dblclicked_tooltip_data,
+                    sum,
+                    index_col,
+                  )}
+                >
+                  {matrix.get_matrix_value(
+                    file_name_header_elem[file_name][index].matrix_key(),
+                    he_col.matrix_key(),
+                  ).mark ||
+                    "-"}
+                </td>
+              ))}
+            </tr>,
+          );
+  
+        sum += 1;
+      }
+    }
+
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
       <div className="mx-2">
@@ -350,66 +428,32 @@ const generate_table_page = (path: string) => {
         </label>
         <table className="table-fixed">
           <thead>
+            <tr key="header_file_row_0">
+              {/* ファイル名を入れる Header 行を追加 */}
+              <td className="border text-center" key="header_row_0_col_0">(空欄)</td>
+              <td className="border text-center" key="header_row_0_col_0">(空欄)</td>
+              {Object.keys(file_name_header_elem).map((file_name, index) => (
+                <td
+                  className="border text-center" 
+                  key={`header_row_0+col_${index + 2}`}
+                  colSpan={file_name_header_elem[file_name].length}
+                >
+                  {file_name}
+                </td>
+              ))}
+            </tr>
             <tr key={"header_row_0"}>
-              {["(空欄)"].concat(
-                header_elements.map<string>((he) => he.repr()),
-              ).map((e, index) => (
-                <td key={`header_row_0_col_${index}`} className="border">
-                  {e}
+              <td className="border text-center" key="header_row_1_col_0">(空欄)</td>
+              <td className="border text-center" key="header_row_1_col_1">(空欄)</td>
+              {header_elements.map((e, index) => (
+                <td key={`header_row_1_col_${index + 2}`} className="border">
+                  {e.repr()}
                 </td>
               ))}
             </tr>
           </thead>
           <tbody>
-            {header_elements.map((he_row, index_row) => (
-              <tr key={`content_row_${index_row}`}>
-                <td key={`header_row_${index_row}_col_0`} className="border">
-                  {he_row.repr()}
-                </td>
-                {header_elements.map(
-                  (he_col, index_col) => (
-                    <td
-                      key={`content_row_${index_row}_col_${index_col}`}
-                      className="border text-center"
-                      onDoubleClick={() => {
-                        set_dblclick_tooltip_id(
-                          {
-                            id: `content_row_${index_row}_col_${index_col}`,
-                            mark: matrix.get_matrix_value(
-                              he_row.matrix_key(),
-                              he_col.matrix_key(),
-                            ).mark ||
-                              "-",
-                            description: `${
-                              matrix.get_matrix_value(
-                                he_row.matrix_key(),
-                                he_col.matrix_key(),
-                              ).description
-                            }`,
-                            key_row: he_row.matrix_key(),
-                            key_col: he_col.matrix_key(),
-                          },
-                        );
-                      }}
-                      {...get_content_td_attr(
-                        matrix,
-                        he_row,
-                        he_col,
-                        dblclicked_tooltip_data,
-                        index_row,
-                        index_col,
-                      )}
-                    >
-                      {matrix.get_matrix_value(
-                        he_row.matrix_key(),
-                        he_col.matrix_key(),
-                      ).mark ||
-                        "-"}
-                    </td>
-                  ),
-                )}
-              </tr>
-            ))}
+            { table_content }
           </tbody>
         </table>
         {dblclicked_tooltip_data === undefined
@@ -478,11 +522,13 @@ const generate_table_page = (path: string) => {
               </div>
             </Tooltip>
           )}
-          <button onClick={async () => {
+        <button
+          onClick={async () => {
             await write_to_tablefile(matrix, read_file_info);
-          }}>
-            保存
-          </button>
+          }}
+        >
+          保存
+        </button>
       </div>
     );
   };
