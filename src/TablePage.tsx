@@ -204,7 +204,6 @@ function get_content_td_attr(
   }
 }
 
-
 interface DblClickedData {
   id: string;
   mark: string;
@@ -360,27 +359,43 @@ const generate_table_page = (path: string) => {
     }
 
     // tbody を生成
-    const table_content = [];
-    let sum = 0;
-    for (const file_name in file_name_header_elem) {
-      for (const index in file_name_header_elem[file_name]) {
+    const generate_table_content: () => JSX.Element[] = () => {
+      const table_content = [];
+      let sum_of_row = 0; // 表示した列の総数
+      for (const file_name in file_name_header_elem) {
+        for (const index in file_name_header_elem[file_name]) {
           table_content.push(
-            <tr>
-              { index === "0" ? 
-              <td className="border text-center" rowSpan={file_name_header_elem[file_name].length}>
-                {file_name}
-              </td>:
-              ""
-              }
-              <td className="border text-center">{file_name_header_elem[file_name][index].repr()}</td>
+            <tr key={`content_row_${sum_of_row}`}>
+              {index === "0"
+                ? (
+                  <td
+                    key={`content_row_${sum_of_row}_col_0`}
+                    className="border text-center"
+                    rowSpan={file_name_header_elem[file_name].length}
+                  >
+                    {file_name}
+                  </td>
+                )
+                : ""}
+              <td
+                key={`content_row_${sum_of_row}_col_1`}
+                className="border text-center"
+              >
+                {file_name_header_elem[file_name][index].repr()}
+              </td>
               {header_elements.map((he_col, index_col) => (
                 <td
-                  key={`content_row_${sum}_col_${index_col}`}
+                  key={`content_row_${sum_of_row}_col_${index_col + 2}`}
                   className="border text-center"
                   onDoubleClick={() => {
+                    console.log(
+                      `ダブルクリックされたのは: content_row_${sum_of_row}_col_${
+                        index_col + 2
+                      }`,
+                    );
                     set_dblclick_tooltip_id(
                       {
-                        id: `content_row_${file_name_header_elem[file_name][index]}_col_${index_col}`,
+                        id: `content_row_${sum_of_row}_col_${index_col + 2}`,
                         mark: matrix.get_matrix_value(
                           file_name_header_elem[file_name][index].matrix_key(),
                           he_col.matrix_key(),
@@ -388,11 +403,13 @@ const generate_table_page = (path: string) => {
                           "-",
                         description: `${
                           matrix.get_matrix_value(
-                            file_name_header_elem[file_name][index].matrix_key(),
+                            file_name_header_elem[file_name][index]
+                              .matrix_key(),
                             he_col.matrix_key(),
                           ).description
                         }`,
-                        key_row: file_name_header_elem[file_name][index].matrix_key(),
+                        key_row: file_name_header_elem[file_name][index]
+                          .matrix_key(),
                         key_col: he_col.matrix_key(),
                       },
                     );
@@ -402,7 +419,7 @@ const generate_table_page = (path: string) => {
                     file_name_header_elem[file_name][index],
                     he_col,
                     dblclicked_tooltip_data,
-                    sum,
+                    sum_of_row,
                     index_col,
                   )}
                 >
@@ -415,10 +432,12 @@ const generate_table_page = (path: string) => {
               ))}
             </tr>,
           );
-  
-        sum += 1;
+
+          sum_of_row += 1;
+        }
       }
-    }
+      return table_content;
+    };
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
@@ -430,11 +449,15 @@ const generate_table_page = (path: string) => {
           <thead>
             <tr key="header_file_row_0">
               {/* ファイル名を入れる Header 行を追加 */}
-              <td className="border text-center" key="header_row_0_col_0">(空欄)</td>
-              <td className="border text-center" key="header_row_0_col_0">(空欄)</td>
+              <td className="border text-center" key="header_row_0_col_0">
+                (空欄)
+              </td>
+              <td className="border text-center" key="header_row_0_col_1">
+                (空欄)
+              </td>
               {Object.keys(file_name_header_elem).map((file_name, index) => (
                 <td
-                  className="border text-center" 
+                  className="border text-center"
                   key={`header_row_0+col_${index + 2}`}
                   colSpan={file_name_header_elem[file_name].length}
                 >
@@ -443,8 +466,12 @@ const generate_table_page = (path: string) => {
               ))}
             </tr>
             <tr key={"header_row_0"}>
-              <td className="border text-center" key="header_row_1_col_0">(空欄)</td>
-              <td className="border text-center" key="header_row_1_col_1">(空欄)</td>
+              <td className="border text-center" key="header_row_1_col_0">
+                (空欄)
+              </td>
+              <td className="border text-center" key="header_row_1_col_1">
+                (空欄)
+              </td>
               {header_elements.map((e, index) => (
                 <td key={`header_row_1_col_${index + 2}`} className="border">
                   {e.repr()}
@@ -453,7 +480,7 @@ const generate_table_page = (path: string) => {
             </tr>
           </thead>
           <tbody>
-            { table_content }
+            {generate_table_content()}
           </tbody>
         </table>
         {dblclicked_tooltip_data === undefined
@@ -529,6 +556,7 @@ const generate_table_page = (path: string) => {
         >
           保存
         </button>
+        <p>{dblclicked_tooltip_data ? dblclicked_tooltip_data.id : ""}</p>
       </div>
     );
   };
