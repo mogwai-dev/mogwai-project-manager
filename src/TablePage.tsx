@@ -389,11 +389,6 @@ const generate_table_page = (path: string) => {
                     key={`content_row_${row_index}_col_${index_col}`}
                     className="border text-center"
                     onDoubleClick={() => {
-                      console.log(
-                        `ダブルクリックされたのは: content_row_${row_index}_col_${
-                          index_col + 2
-                        }`,
-                      );
                       set_dblclick_tooltip_id(
                         {
                           id: `content_row_${row_index}_col_${index_col}`,
