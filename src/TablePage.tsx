@@ -364,74 +364,77 @@ const generate_table_page = (path: string) => {
       let sum_of_row = 0; // 表示した列の総数
       for (const file_name in file_name_header_elem) {
         for (const index in file_name_header_elem[file_name]) {
-          table_content.push(
-            <tr key={`content_row_${sum_of_row}`}>
-              {index === "0"
-                ? (
-                  <td
-                    key={`content_row_${sum_of_row}_col_0`}
-                    className="border text-center"
-                    rowSpan={file_name_header_elem[file_name].length}
-                  >
-                    {file_name}
-                  </td>
-                )
-                : ""}
-              <td
-                key={`content_row_${sum_of_row}_col_1`}
-                className="border text-center"
-              >
-                {file_name_header_elem[file_name][index].repr()}
-              </td>
-              {header_elements.map((he_col, index_col) => (
+          ((row_index) => {
+            table_content.push(
+              <tr key={`header_row_${row_index}`}>
+                {index === "0"
+                  ? (
+                    <td
+                      key={`header_row_${row_index}_col_0`}
+                      className="border text-center"
+                      rowSpan={file_name_header_elem[file_name].length}
+                    >
+                      {file_name}
+                    </td>
+                  )
+                  : ""}
                 <td
-                  key={`content_row_${sum_of_row}_col_${index_col + 2}`}
+                  key={`header_row_${row_index}_col_1`}
                   className="border text-center"
-                  onDoubleClick={() => {
-                    console.log(
-                      `ダブルクリックされたのは: content_row_${sum_of_row}_col_${
-                        index_col + 2
-                      }`,
-                    );
-                    set_dblclick_tooltip_id(
-                      {
-                        id: `content_row_${sum_of_row}_col_${index_col + 2}`,
-                        mark: matrix.get_matrix_value(
-                          file_name_header_elem[file_name][index].matrix_key(),
-                          he_col.matrix_key(),
-                        ).mark ||
-                          "-",
-                        description: `${
-                          matrix.get_matrix_value(
+                >
+                  {file_name_header_elem[file_name][index].repr()}
+                </td>
+                {header_elements.map((he_col, index_col) => (
+                  <td
+                    key={`content_row_${row_index}_col_${index_col}`}
+                    className="border text-center"
+                    onDoubleClick={() => {
+                      console.log(
+                        `ダブルクリックされたのは: content_row_${row_index}_col_${
+                          index_col + 2
+                        }`,
+                      );
+                      set_dblclick_tooltip_id(
+                        {
+                          id: `content_row_${row_index}_col_${index_col}`,
+                          mark: matrix.get_matrix_value(
                             file_name_header_elem[file_name][index]
                               .matrix_key(),
                             he_col.matrix_key(),
-                          ).description
-                        }`,
-                        key_row: file_name_header_elem[file_name][index]
-                          .matrix_key(),
-                        key_col: he_col.matrix_key(),
-                      },
-                    );
-                  }}
-                  {...get_content_td_attr(
-                    matrix,
-                    file_name_header_elem[file_name][index],
-                    he_col,
-                    dblclicked_tooltip_data,
-                    sum_of_row,
-                    index_col,
-                  )}
-                >
-                  {matrix.get_matrix_value(
-                    file_name_header_elem[file_name][index].matrix_key(),
-                    he_col.matrix_key(),
-                  ).mark ||
-                    "-"}
-                </td>
-              ))}
-            </tr>,
-          );
+                          ).mark ||
+                            "-",
+                          description: `${
+                            matrix.get_matrix_value(
+                              file_name_header_elem[file_name][index]
+                                .matrix_key(),
+                              he_col.matrix_key(),
+                            ).description
+                          }`,
+                          key_row: file_name_header_elem[file_name][index]
+                            .matrix_key(),
+                          key_col: he_col.matrix_key(),
+                        },
+                      );
+                    }}
+                    {...get_content_td_attr(
+                      matrix,
+                      file_name_header_elem[file_name][index],
+                      he_col,
+                      dblclicked_tooltip_data,
+                      row_index,
+                      index_col,
+                    )}
+                  >
+                    {matrix.get_matrix_value(
+                      file_name_header_elem[file_name][index].matrix_key(),
+                      he_col.matrix_key(),
+                    ).mark ||
+                      "-"}
+                  </td>
+                ))}
+              </tr>,
+            );
+          })(sum_of_row);
 
           sum_of_row += 1;
         }
