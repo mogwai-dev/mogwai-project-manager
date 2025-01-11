@@ -54,6 +54,107 @@ async function write_to_tablefile(
   await writeTextFile(read_file_info.read_table_file_path, write_content);
 }
 
+// テーブルのセル
+class Cell {
+  value: string | undefined;
+  attrs: { [attr: string]: string }; // 属性の名前: その設定値
+  private isActive: boolean;
+
+  constructor() {
+    this.attrs = {"className": "border text-center"};
+    this.isActive = true;
+  }
+
+  setValue(value: string) {
+    this.value = value;
+  }
+
+  setIsActive(isActive: boolean) {
+    this.isActive = isActive;
+  }
+
+  getIsActive(): boolean {
+    return this.isActive;
+  }
+
+  setAttr(attr:string, value: string) {
+    this.attrs[attr] = value;
+  }
+
+  asJsx(): JSX.Element {
+    return <td {...this.attrs}>{this.value}</td>;
+  }
+}
+
+// テーブル
+class Table {
+  table: Cell[][];
+
+  constructor(init_row: number, init_col: number) {
+    /* 行列の初期化 */
+    this.table = [];
+
+    for (let i = 0; i < init_row; i++) {
+      this.table[i] = [];
+      for (let j = 0; j < init_col; j++) {
+          this.table[i].push(new Cell());
+      }
+    }
+  }
+
+  setAttrAt(row: number, col: number, attrs: { [attr: string]: string }) {
+    for (const attr in attrs) {
+      this.table[row][col].setAttr(attr, attrs[attr]);
+    }
+  }
+
+  setValueAt(row: number, col: number, value: string) {
+    this.table[row][col].setValue(value);
+  }
+
+  // (fromRow, fromCol) のセルから (toRow, toCol) までのセルを結合させる
+  mergeCell(fromRow: number, fromCol: number, toRow: number, toCol: number) {
+    const fromRowTmp = Math.min(fromRow, toRow);
+    const toRowTmp = Math.max(fromRow, toRow);
+    const fromColTmp = Math.min(fromCol, toCol);
+    const toColTmp = Math.max(fromCol, toCol);
+
+    for (let r = fromRowTmp; r <=  toRowTmp; r++) {
+      for (let c = fromColTmp; c <= toColTmp; c++) {
+        if (r == fromRowTmp && c == fromColTmp) {
+          // 結合セルの最初
+          this.table[r][c].setIsActive(true);
+          this.table[r][c].setAttr("rowSpan", (toRowTmp-fromRowTmp).toString());
+          this.table[r][c].setAttr("colSpan", (toColTmp-fromColTmp).toString());
+        }
+        else {
+          this.table[r][c].setIsActive(false);
+        }
+      }
+    }
+  }
+
+  asJsx(): JSX.Element {
+    const rows: JSX.Element[] = [];
+
+    for (const i in this.table) {
+      const cols: JSX.Element[] = [];
+      for (const j in this.table[i]) {
+        if (this.table[i][j].getIsActive()) {
+          cols.push(this.table[i][j].asJsx());
+        }
+      }
+      rows.push(<tr>{cols}</tr>);
+    }
+
+    return (
+      <table>
+        {rows}
+      </table>
+    );
+  }
+}
+
 class HeaderElement {
   file_name: string;
   id: string; // unique な数値
