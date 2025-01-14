@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { Tooltip } from "react-tooltip";
+import MyTooltip from "./MyTooltip";
 
 // デバッグ用制御変数
 const SHOW_TABLE_INFO: boolean = true;
 
 // 設定ディレクトリ内のファイルをすべて読み込む(*.list と *.table)
-async function get_dir(path: string): Promise<string> {
+async function getDir(path: string): Promise<string> {
   const ret = await invoke<string>("get_dir", {
     path,
   });
@@ -15,7 +16,7 @@ async function get_dir(path: string): Promise<string> {
   return ret;
 }
 
-async function join_path(dirPath: string, fileName: string): Promise<string> {
+async function joinPath(dirPath: string, fileName: string): Promise<string> {
   const ret = await invoke<string>("join_path", {
     dirPath,
     fileName,
@@ -24,49 +25,57 @@ async function join_path(dirPath: string, fileName: string): Promise<string> {
   return ret;
 }
 
-async function write_to_tablefile(
-  matrix: Matrix,
-  read_file_info: ReadFileInfo,
+async function writeToTableFile(
+  tablePageInfo: TablePageInfo,
 ) {
   let write_content = "' リストファイル一覧\n";
 
-  for (const read_file_name of read_file_info.read_list_file_names) {
+  for (const read_file_name of tablePageInfo.headerInfo.keys()) {
     write_content += `' ${read_file_name} \n`;
   }
 
   // 空行
   write_content += "\n";
 
-  for (const row_key in matrix.matrix) {
-    for (const col_key in matrix.matrix[row_key]) {
+  for (const row_key in tablePageInfo.matrix) {
+    for (const col_key in tablePageInfo.matrix.matrix[row_key]) {
       if (
-        matrix.matrix[row_key][col_key].mark !== "-" &&
-        matrix.matrix[row_key][col_key].mark !== ""
+        tablePageInfo.matrix.matrix[row_key][col_key].mark !== "-" &&
+        tablePageInfo.matrix.matrix[row_key][col_key].mark !== ""
       ) {
         write_content += `${row_key} --> ${col_key} ' ${
-          matrix.matrix[row_key][col_key].description.replace("\r\n", " ")
+          tablePageInfo.matrix.matrix[row_key][col_key].description.replace(
+            "\r\n",
+            " ",
+          )
             .replace("\n", " ")
         }\n`;
       }
     }
   }
 
-  await writeTextFile(read_file_info.read_table_file_path, write_content);
+  await writeTextFile(tablePageInfo.tableFilePath, write_content);
 }
 
 // テーブルのセル
 class Cell {
   value: string | undefined;
   attrs: { [attr: string]: string }; // 属性の名前: その設定値
-  private isActive: boolean;
+  isActive: boolean;
+  onClick: () => void;
 
   constructor() {
-    this.attrs = {"className": "border text-center"};
+    this.attrs = { "className": "border text-center" };
     this.isActive = true;
+    this.onClick = () => {};
   }
 
   setValue(value: string) {
     this.value = value;
+  }
+
+  setOnClick(onClick: () => void) {
+    this.onClick = onClick;
   }
 
   setIsActive(isActive: boolean) {
@@ -77,27 +86,74 @@ class Cell {
     return this.isActive;
   }
 
-  setAttr(attr:string, value: string) {
+  setAttr(attr: string, value: string) {
     this.attrs[attr] = value;
   }
 
-  asJsx(): JSX.Element {
-    return <td {...this.attrs}>{this.value}</td>;
+  asJsx(key: string): JSX.Element {
+    return (
+      <td key={key} onClick={this.onClick} {...this.attrs}>{this.value}</td>
+    );
+  }
+}
+
+class HeaderCell extends Cell {
+  constructor() {
+    super();
+  }
+
+  asJsx(key: string): JSX.Element {
+    return (
+      <th key={key} onClick={this.onClick} {...this.attrs}>{this.value}</th>
+    );
   }
 }
 
 // テーブル
 class Table {
   table: Cell[][];
+  tablePageInfo: TablePageInfo;
+  dblClickedData: DblClickedData | undefined;
+  update: Dispatch<SetStateAction<TablePageInfo>>;
 
-  constructor(init_row: number, init_col: number) {
+  constructor(
+    tablePageInfo: TablePageInfo,
+    update: Dispatch<SetStateAction<TablePageInfo>>,
+  ) {
+    this.tablePageInfo = tablePageInfo;
+    this.update = update;
+
+    let initRow: number = 2; // ヘッダーが 2 段になるので + 2
+    let initCol: number = 2; // ヘッダーが 2 段になるので + 2
+
+    for (const k of this.tablePageInfo.headerInfo.keys()) {
+      // row
+      if (this.tablePageInfo.headerInfo.get(k)?.isRowOpen) {
+        initRow += this.tablePageInfo.headerInfo.get(k)!.headerElements.length;
+      } else {
+        initRow += 1; // headerElements が 1 にまとまって ファイル名のみとなる
+      }
+
+      // col
+      if (this.tablePageInfo.headerInfo.get(k)?.isColOpen) {
+        initCol += this.tablePageInfo.headerInfo.get(k)!.headerElements.length;
+      } else {
+        initCol += 1; // headerElements が 1 にまとまって ファイル名のみとなる
+      }
+    }
+
     /* 行列の初期化 */
     this.table = [];
 
-    for (let i = 0; i < init_row; i++) {
+    for (let i = 0; i < initRow; i++) {
       this.table[i] = [];
-      for (let j = 0; j < init_col; j++) {
+      for (let j = 0; j < initCol; j++) {
+        // 1 行目, 2 行目 は header
+        if (i == 0 || i == 1 || j == 0 || j == 1) {
+          this.table[i].push(new HeaderCell());
+        } else {
           this.table[i].push(new Cell());
+        }
       }
     }
   }
@@ -105,6 +161,48 @@ class Table {
   setAttrAt(row: number, col: number, attrs: { [attr: string]: string }) {
     for (const attr in attrs) {
       this.table[row][col].setAttr(attr, attrs[attr]);
+    }
+  }
+
+  setContentValueAt(
+    row: number,
+    col: number,
+    value: string,
+    description: string,
+  ) {
+    this.table[row][col].setAttr("data-tooltip-id", "td-tooltip");
+    this.table[row][col].setAttr("data-tooltip-content", description);
+
+    this.table[row][col].setValue(value);
+  }
+
+  setFileNameAtCol(row: number, col: number, fileName: string) {
+    const onClick: () => void = () => {
+      this.tablePageInfo.headerInfo.get(fileName)!.isColOpen = !this
+        .tablePageInfo.headerInfo.get(fileName)!.isColOpen;
+      this.update({ ...this.tablePageInfo });
+    };
+    this.table[row][col].setOnClick(onClick);
+
+    if (this.tablePageInfo.headerInfo.get(fileName)!.isColOpen) {
+      this.table[row][col].setValue("▼" + fileName);
+    } else {
+      this.table[row][col].setValue("▶" + fileName);
+    }
+  }
+
+  setFileNameAtRow(row: number, col: number, fileName: string) {
+    const onClick: () => void = () => {
+      this.tablePageInfo.headerInfo.get(fileName)!.isRowOpen = !this
+        .tablePageInfo.headerInfo.get(fileName)!.isRowOpen;
+      this.update({ ...this.tablePageInfo });
+    };
+    this.table[row][col].setOnClick(onClick);
+
+    if (this.tablePageInfo.headerInfo.get(fileName)!.isRowOpen) {
+      this.table[row][col].setValue("▼" + fileName);
+    } else {
+      this.table[row][col].setValue("▶" + fileName);
     }
   }
 
@@ -119,38 +217,318 @@ class Table {
     const fromColTmp = Math.min(fromCol, toCol);
     const toColTmp = Math.max(fromCol, toCol);
 
-    for (let r = fromRowTmp; r <=  toRowTmp; r++) {
+    for (let r = fromRowTmp; r <= toRowTmp; r++) {
       for (let c = fromColTmp; c <= toColTmp; c++) {
         if (r == fromRowTmp && c == fromColTmp) {
           // 結合セルの最初
           this.table[r][c].setIsActive(true);
-          this.table[r][c].setAttr("rowSpan", (toRowTmp-fromRowTmp).toString());
-          this.table[r][c].setAttr("colSpan", (toColTmp-fromColTmp).toString());
-        }
-        else {
+          this.table[r][c].setAttr(
+            "rowSpan",
+            (toRowTmp - fromRowTmp + 1).toString(),
+          );
+          this.table[r][c].setAttr(
+            "colSpan",
+            (toColTmp - fromColTmp + 1).toString(),
+          );
+        } else {
           this.table[r][c].setIsActive(false);
         }
       }
     }
   }
 
+  // table の jsx を生成する
   asJsx(): JSX.Element {
-    const rows: JSX.Element[] = [];
+    this.setValueAt(0, 0, "(空欄)");
+    this.mergeCell(0, 0, 1, 1); // 空欄
 
-    for (const i in this.table) {
-      const cols: JSX.Element[] = [];
-      for (const j in this.table[i]) {
-        if (this.table[i][j].getIsActive()) {
-          cols.push(this.table[i][j].asJsx());
+    // ヘッダー 0, 1 行目の設定
+    let colAtRow0 = 2;
+    for (const fileName of this.tablePageInfo.headerInfo.keys()) {
+      if (this.tablePageInfo.headerInfo.get(fileName)!.isColOpen) {
+        // 0 行目の設定
+        this.mergeCell(
+          0,
+          colAtRow0,
+          0,
+          colAtRow0 +
+            this.tablePageInfo.headerInfo.get(fileName)!.headerElements.length -
+            1,
+        );
+        this.setFileNameAtCol(0, colAtRow0, fileName);
+
+        // 1 行目の設定
+        let colAtRow1 = colAtRow0;
+        for (
+          const element of this.tablePageInfo.headerInfo.get(fileName)!
+            .headerElements
+        ) {
+          this.table[1][colAtRow1].setIsActive(true);
+          this.setValueAt(1, colAtRow1, element.repr());
+          colAtRow1 += 1;
         }
+
+        colAtRow0 +=
+          this.tablePageInfo.headerInfo.get(fileName)!.headerElements.length;
+      } else {
+        // close
+
+        this.setFileNameAtCol(0, colAtRow0, fileName);
+
+        colAtRow0 += 1; // 閉じているので 1 列に設定する
       }
-      rows.push(<tr>{cols}</tr>);
     }
 
+    // ヘッダー 0, 1 列目の値の設定
+    let rowAtCol0 = 2;
+    for (const fileName of this.tablePageInfo.headerInfo.keys()) {
+      if (this.tablePageInfo.headerInfo.get(fileName)!.isRowOpen) {
+        // 0 列目
+        this.mergeCell(
+          rowAtCol0,
+          0,
+          rowAtCol0 +
+            this.tablePageInfo.headerInfo.get(fileName)!.headerElements.length -
+            1,
+          0,
+        );
+
+        this.setFileNameAtRow(rowAtCol0, 0, fileName);
+
+        // 1 列目
+        let rowAtCol1 = rowAtCol0;
+        for (
+          const element of this.tablePageInfo.headerInfo.get(fileName)!
+            .headerElements
+        ) {
+          this.table[rowAtCol1][1].setIsActive(true);
+          this.setValueAt(rowAtCol1, 1, element.repr());
+          rowAtCol1 += 1;
+        }
+
+        rowAtCol0 +=
+          this.tablePageInfo.headerInfo.get(fileName)!.headerElements.length;
+      } else {
+        // close
+        this.setFileNameAtRow(rowAtCol0, 0, fileName);
+        this.setValueAt(rowAtCol0, 1, "");
+
+        rowAtCol0 += 1; // 閉じているので 1 列に設定する
+      }
+    }
+
+    // ヘッダーじゃない部分の設定
+    let fileBaseCol = 0; // ファイル間のテーブルが始まる位置
+    let fileBaseRow = 0; // ファイル間のテーブルが始まる位置
+    for (const fileNameRow of this.tablePageInfo.headerInfo.keys()) {
+      for (const fileNameCol of this.tablePageInfo.headerInfo.keys()) {
+        let contentCol = 0; // ファイル同士でのテーブル内でのインデックス
+        let contentRow = 0; // ファイル同士でのテーブル内でのインデックス
+        if (
+          this.tablePageInfo.headerInfo.get(fileNameRow)!.isRowOpen &&
+          this.tablePageInfo.headerInfo.get(fileNameCol)!.isColOpen
+        ) {
+          for (
+            const heRow of this.tablePageInfo.headerInfo.get(fileNameRow)!
+              .headerElements
+          ) {
+            // fileName の col が開いているとき
+            for (
+              const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
+                .headerElements
+            ) {
+              const mark = this.tablePageInfo.matrix.getMatrixValue(
+                heRow.matrixKey(),
+                heCol.matrixKey(),
+              ).mark;
+
+              if (mark === "-" || mark === "") {
+                this.setValueAt(
+                  2 + fileBaseRow + contentRow,
+                  2 + fileBaseCol + contentCol,
+                  mark,
+                );
+              } else {
+                this.setContentValueAt(
+                  2 + fileBaseRow + contentRow,
+                  2 + fileBaseCol + contentCol,
+                  this.tablePageInfo.matrix.getMatrixValue(
+                    heRow.matrixKey(),
+                    heCol.matrixKey(),
+                  ).mark,
+                  `${
+                    this.tablePageInfo.matrix.getMatrixValue(
+                      heRow.matrixKey(),
+                      heCol.matrixKey(),
+                    ).description
+                  } ※ ダブルクリックで編集`,
+                );
+              }
+
+              contentCol += 1;
+            }
+            contentCol = 0;
+            contentRow += 1;
+          }
+        } else if (
+          this.tablePageInfo.headerInfo.get(fileNameRow)!.isRowOpen &&
+          !this.tablePageInfo.headerInfo.get(fileNameCol)!.isColOpen
+        ) {
+          // fileName の col が閉じているとき
+
+          for (
+            const heRow of this.tablePageInfo.headerInfo.get(fileNameRow)!
+              .headerElements
+          ) {
+            let combinedMark = "-";
+            for (
+              const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
+                .headerElements
+            ) {
+              if (
+                this.tablePageInfo.matrix.getMatrixValue(
+                  heRow.matrixKey(),
+                  heCol.matrixKey(),
+                ).mark === "〇"
+              ) {
+                combinedMark = "〇";
+              }
+            }
+            this.setValueAt(
+              2 + fileBaseRow + contentRow,
+              2 + fileBaseCol + contentCol,
+              combinedMark,
+            );
+            contentRow += 1;
+          }
+
+          contentCol += 1;
+        } else if (
+          !this.tablePageInfo.headerInfo.get(fileNameRow)!.isRowOpen &&
+          this.tablePageInfo.headerInfo.get(fileNameCol)!.isColOpen
+        ) {
+          // row が閉じているとき
+          for (
+            const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
+              .headerElements
+          ) {
+            let combinedMark = "-";
+            for (
+              const heRow of this.tablePageInfo.headerInfo.get(fileNameRow)!
+                .headerElements
+            ) {
+              if (
+                this.tablePageInfo.matrix.getMatrixValue(
+                  heRow.matrixKey(),
+                  heCol.matrixKey(),
+                ).mark === "〇"
+              ) {
+                combinedMark = "〇";
+              }
+            }
+            this.setValueAt(
+              2 + fileBaseRow + contentRow,
+              2 + fileBaseCol + contentCol,
+              combinedMark,
+            );
+            contentCol += 1;
+          }
+          contentRow += 1;
+        } else {
+          let combinedMark = "-";
+          for (
+            const heRow of this.tablePageInfo.headerInfo.get(fileNameCol)!
+              .headerElements
+          ) {
+            for (
+              const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
+                .headerElements
+            ) {
+              if (
+                this.tablePageInfo.matrix.getMatrixValue(
+                  heRow.matrixKey(),
+                  heCol.matrixKey(),
+                ).mark === "〇"
+              ) {
+                combinedMark = "〇";
+              }
+            }
+          }
+          this.setValueAt(
+            2 + fileBaseRow + contentRow,
+            2 + fileBaseCol + contentCol,
+            combinedMark,
+          );
+          contentRow += 1;
+          contentCol += 1;
+        }
+
+        if (this.tablePageInfo.headerInfo.get(fileNameCol)!.isColOpen) {
+          fileBaseCol +=
+            this.tablePageInfo.headerInfo.get(fileNameCol)!.headerElements
+              .length;
+        } else {
+          fileBaseCol += 1;
+        }
+      }
+
+      fileBaseCol = 0;
+
+      if (this.tablePageInfo.headerInfo.get(fileNameRow)!.isRowOpen) {
+        fileBaseRow +=
+          this.tablePageInfo.headerInfo.get(fileNameRow)!.headerElements.length;
+      } else {
+        fileBaseRow += 1;
+      }
+    }
+
+    // <thead> の中身を作る
+    const theadRows: JSX.Element[] = [];
+
+    // 1 行目と 2 行目は <thead> に入れる
+    for (let i = 0; i < 2; i++) {
+      const thCols = [];
+      for (const j in this.table[i]) {
+        if (this.table[i][j].getIsActive()) {
+          thCols.push(this.table[i][j].asJsx(`row_${i}_col_${j}`));
+        }
+      }
+      theadRows.push(<tr key={`row_${i}`}>{thCols}</tr>);
+    }
+
+    const tbodyRows: JSX.Element[] = [];
+    // 2 行目以降は <tbody> に入れる
+    for (let i = 2; i < this.table.length; i++) {
+      const tbodyCols: JSX.Element[] = [];
+      for (const j in this.table[i]) {
+        if (this.table[i][j].getIsActive()) {
+          tbodyCols.push(this.table[i][j].asJsx(`row_${i}_col_${j}`));
+        }
+      }
+      tbodyRows.push(<tr key={`row_${i}`}>{tbodyCols}</tr>);
+    }
+
+    // Tooltip
+    const tooltip: JSX.Element = <Tooltip id={"td-tooltip"} />;
+    // if (this.dblClickedData === undefined) {
+
+    //}
+    // else {
+    // tooltip = <MyTooltip />
+    // }
+
     return (
-      <table>
-        {rows}
-      </table>
+      <div>
+        <table>
+          <thead>
+            {theadRows}
+          </thead>
+          <tbody>
+            {tbodyRows}
+          </tbody>
+        </table>
+        {tooltip}
+      </div>
     );
   }
 }
@@ -166,7 +544,7 @@ class HeaderElement {
     this.represent_name = represent_name;
   }
 
-  matrix_key(): string {
+  matrixKey(): string {
     return `${this.file_name}:${this.id}`;
   }
 
@@ -181,7 +559,7 @@ class HeaderElement {
 }
 
 // ヘッダーとなる部分を抽出する
-function extract_header_element(
+function extractHeaderElement(
   file_name: string,
   list_text: string,
 ): HeaderElement[] {
@@ -205,40 +583,41 @@ function extract_header_element(
 
 // matrix["x.list:1"]["y.list:1"] = 'o' みたいな....
 type MatrixValue = { mark: string; description: string };
-
 class Matrix {
-  matrix: { [row_key: string]: { [column_key: string]: MatrixValue } };
+  matrix: { [rowKey: string]: { [columnKey: string]: MatrixValue } };
 
   constructor() {
     this.matrix = {};
   }
 
   register_arrow(
-    file_name_from: string,
-    id_from: string,
-    file_name_to: string,
-    id_to: string,
+    fileNameFrom: string,
+    idFrom: string,
+    fileNameTo: string,
+    idTo: string,
     description: string,
     mark: string,
   ) {
-    if (!this.matrix[`${file_name_from}:${id_from}`]) {
-      this.matrix[`${file_name_from}:${id_from}`] = {};
+    if (!this.matrix[`${fileNameFrom}:${idFrom}`]) {
+      this.matrix[`${fileNameFrom}:${idFrom}`] = {};
     }
 
     if (
-      !this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`]
+      !this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`]
     ) {
-      this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`] =
-        { mark: "", description: "" };
+      this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`] = {
+        mark: "",
+        description: "",
+      };
     }
 
-    this.matrix[`${file_name_from}:${id_from}`][`${file_name_to}:${id_to}`] = {
+    this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`] = {
       mark,
       description,
     };
   }
 
-  get_matrix_value(
+  getMatrixValue(
     key_from: string,
     key_to: string,
   ): MatrixValue {
@@ -247,10 +626,36 @@ class Matrix {
     }
 
     if (!this.matrix[key_from][key_to]) {
-      this.matrix[key_from][key_to] = { mark: "", description: "" };
+      this.matrix[key_from][key_to] = { mark: "-", description: "" };
     }
 
     return this.matrix[key_from][key_to];
+  }
+}
+
+type HeaderInfo = Map<
+  string,
+  { headerElements: HeaderElement[]; isRowOpen: boolean; isColOpen: boolean }
+>;
+
+// 読み込んだテーブルファイルの情報
+class TablePageInfo {
+  matrix: Matrix; // ヘッダーを含まない行列の値
+  headerInfo: HeaderInfo;
+  tableFilePath: string;
+
+  static empty(): TablePageInfo {
+    return new TablePageInfo(
+      new Matrix(),
+      new Map(),
+      "",
+    );
+  }
+
+  constructor(matrix: Matrix, headerInfo: HeaderInfo, tableFilePath: string) {
+    this.matrix = matrix;
+    this.headerInfo = headerInfo;
+    this.tableFilePath = tableFilePath;
   }
 }
 
@@ -262,8 +667,7 @@ enum ReadState {
 
 // td の属性を取得する関数
 // 毎レンダーごとに呼ばれる
-//
-function get_content_td_attr(
+function getContentTdAttr(
   matrix: Matrix,
   he_row: HeaderElement,
   he_col: HeaderElement,
@@ -272,9 +676,9 @@ function get_content_td_attr(
   index_col: number,
 ): { [attr_key: string]: string } {
   if (
-    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark ===
+    matrix.getMatrixValue(he_row.matrixKey(), he_col.matrixKey()).mark ===
       "" ||
-    matrix.get_matrix_value(he_row.matrix_key(), he_col.matrix_key()).mark ===
+    matrix.getMatrixValue(he_row.matrixKey(), he_col.matrixKey()).mark ===
       "-"
   ) {
     if (dblclicked_tooltip_data === undefined) {
@@ -290,9 +694,9 @@ function get_content_td_attr(
       return {
         "data-tooltip-id": "td-tooltip",
         "data-tooltip-content": `${
-          matrix.get_matrix_value(
-            he_row.matrix_key(),
-            he_col.matrix_key(),
+          matrix.getMatrixValue(
+            he_row.matrixKey(),
+            he_col.matrixKey(),
           ).description
         } ※ダブルクリックで編集できます`,
       };
@@ -313,34 +717,19 @@ interface DblClickedData {
   key_col: string;
 }
 
-interface ReadFileInfo {
-  read_table_file_path: string;
-  read_list_file_names: string[];
-}
-
 const generate_table_page = (path: string) => {
   return () => {
     /* 状態管理 */
-    const [header_elements, set_header_element] = useState<HeaderElement[]>([]);
-    const [matrix, set_matrix] = useState<Matrix>(new Matrix());
-    const [dblclicked_tooltip_data, set_dblclick_tooltip_id] = useState<
+    const [tablePageInfo, setTablePageInfo] = useState<TablePageInfo>(
+      TablePageInfo.empty(),
+    );
+    const [dblclickedTooltipData, setDblclickTooltipId] = useState<
       DblClickedData | undefined
     >(undefined);
-    const [dblclicked_tooltip_description, set_dblclicked_tooltip_description] =
+    const [dblclickedTooltipDescription, setDblclickedTooltipDescription] =
       useState<string>("");
 
-    // initialize 関数内で初期化が行われる
-    const [read_file_info, set_read_file_info] = useState<ReadFileInfo>({
-      read_table_file_path: "",
-      read_list_file_names: [],
-    });
-
     // 変更ハンドラーを定義します
-    const dblclicked_tooltip_description_change = (
-      e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-      set_dblclicked_tooltip_description(e.target.value);
-    };
 
     const [dblclicked_tooltip_mark, set_dblclicked_tooltip_mark] = useState<
       string
@@ -354,48 +743,51 @@ const generate_table_page = (path: string) => {
 
     const hasRun = useRef(false);
     const initialize = async () => {
-      let header_element_tmp: HeaderElement[] = [];
-      const matrix_tmp: Matrix = new Matrix();
+      const matrixTmp: Matrix = new Matrix();
+      const headerInfo: HeaderInfo = new Map();
 
       const text = await readTextFile(path);
 
       // path を保存しておく
-      const read_table_file_path = path;
-      const read_list_file_names = [];
+      const readTableFilePath = path;
 
       // 先頭のコメントを読み込むが
       // 1 行目は飛ばす
-      let read_state: ReadState = ReadState.SkipInitialLine;
+      let readState: ReadState = ReadState.SkipInitialLine;
       const splited = text.split("\n").map((line) => line.trim());
-      let line_num = 0; // 現在読んでいる行数
+      let lineNum = 0; // 現在読んでいる行数
+
       // 現在読んでいる行数が "\n" で分けた行数より大きくなったら終わり
-      while (line_num < splited.length) {
-        const line = splited[line_num];
+      while (lineNum < splited.length) {
+        const line = splited[lineNum];
 
-        if (read_state === ReadState.SkipInitialLine) {
-          read_state = ReadState.ReadFileName;
-          line_num += 1;
-        } else if (read_state === ReadState.ReadFileName) {
+        if (readState === ReadState.SkipInitialLine) {
+          readState = ReadState.ReadFileName;
+          lineNum += 1;
+        } else if (readState === ReadState.ReadFileName) {
           if (line.startsWith("'")) {
-            const file_name = line.slice(1).trim(); // 1 文字目以降を取得
-            read_list_file_names.push(file_name);
-            const dir_name = await get_dir(path);
-            const file_path = await join_path(dir_name, file_name);
+            const fileName = line.slice(1).trim(); // 1 文字目以降を取得
+            const dirName = await getDir(path);
+            const filePath = await joinPath(dirName, fileName);
 
-            const list_text = await readTextFile(file_path);
-            header_element_tmp = header_element_tmp.concat(
-              extract_header_element(file_name, list_text),
-            );
-            line_num += 1;
+            const listText = await readTextFile(filePath);
+
+            headerInfo.set(fileName, {
+              headerElements: extractHeaderElement(fileName, listText),
+              isRowOpen: true,
+              isColOpen: true,
+            });
+
+            lineNum += 1;
           } else {
-            read_state = ReadState.ReadArrow;
+            readState = ReadState.ReadArrow;
           }
-        } else if (read_state === ReadState.ReadArrow) {
+        } else if (readState === ReadState.ReadArrow) {
           if (line.includes("-->") || line.includes("<--")) {
-            const splited_with_space = line.split(" ");
+            const splitedWithSpace = line.split(" ");
 
-            const [file_name_left, id_left] = splited_with_space[0].split(":");
-            const [file_name_right, id_right] = splited_with_space[2].split(
+            const [fileNameLeft, idLeft] = splitedWithSpace[0].split(":");
+            const [fileNameRight, idRight] = splitedWithSpace[2].split(
               ":",
             );
 
@@ -407,37 +799,34 @@ const generate_table_page = (path: string) => {
               description = "";
             }
 
-            if (splited_with_space[1] === "-->") {
-              matrix_tmp.register_arrow(
-                file_name_left,
-                id_left,
-                file_name_right,
-                id_right,
+            if (splitedWithSpace[1] === "-->") {
+              matrixTmp.register_arrow(
+                fileNameLeft,
+                idLeft,
+                fileNameRight,
+                idRight,
                 description,
                 "〇",
               );
-            } else if (splited_with_space[1] === "<--") {
-              matrix_tmp.register_arrow(
-                file_name_right,
-                id_right,
-                file_name_left,
-                id_left,
+            } else if (splitedWithSpace[1] === "<--") {
+              matrixTmp.register_arrow(
+                fileNameRight,
+                idRight,
+                fileNameLeft,
+                idLeft,
                 description,
                 "〇",
               );
             }
           }
 
-          line_num += 1;
+          lineNum += 1;
         }
       }
 
-      set_header_element([...header_elements, ...header_element_tmp]);
-      set_matrix(matrix_tmp);
-      set_read_file_info({
-        read_table_file_path,
-        read_list_file_names,
-      });
+      setTablePageInfo(
+        new TablePageInfo(matrixTmp, headerInfo, readTableFilePath),
+      );
     };
 
     useEffect(() => {
@@ -445,98 +834,86 @@ const generate_table_page = (path: string) => {
         hasRun.current = true;
         initialize();
       }
-
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // あらかじめ、HeaderElement から ファイルを抽出しておく
-    const file_name_header_elem: { [file_name: string]: HeaderElement[] } = {};
-
-    for (const he of header_elements) {
-      if (!file_name_header_elem[he.file_name]) {
-        file_name_header_elem[he.file_name] = [];
-      }
-      file_name_header_elem[he.file_name].push(he);
-    }
-
     // tbody を生成
-    const generate_table_content: () => JSX.Element[] = () => {
-      const table_content = [];
-      let sum_of_row = 0; // 表示した列の総数
-      for (const file_name in file_name_header_elem) {
-        for (const index in file_name_header_elem[file_name]) {
-          ((row_index) => {
-            table_content.push(
-              <tr key={`header_row_${row_index}`}>
-                {index === "0"
-                  ? (
-                    <td
-                      key={`header_row_${row_index}_col_0`}
-                      className="border text-center"
-                      rowSpan={file_name_header_elem[file_name].length}
-                    >
-                      {file_name}
-                    </td>
-                  )
-                  : ""}
-                <td
-                  key={`header_row_${row_index}_col_1`}
-                  className="border text-center"
-                >
-                  {file_name_header_elem[file_name][index].repr()}
-                </td>
-                {header_elements.map((he_col, index_col) => (
-                  <td
-                    key={`content_row_${row_index}_col_${index_col}`}
-                    className="border text-center"
-                    onDoubleClick={() => {
-                      set_dblclick_tooltip_id(
-                        {
-                          id: `content_row_${row_index}_col_${index_col}`,
-                          mark: matrix.get_matrix_value(
-                            file_name_header_elem[file_name][index]
-                              .matrix_key(),
-                            he_col.matrix_key(),
-                          ).mark ||
-                            "-",
-                          description: `${
-                            matrix.get_matrix_value(
-                              file_name_header_elem[file_name][index]
-                                .matrix_key(),
-                              he_col.matrix_key(),
-                            ).description
-                          }`,
-                          key_row: file_name_header_elem[file_name][index]
-                            .matrix_key(),
-                          key_col: he_col.matrix_key(),
-                        },
-                      );
-                    }}
-                    {...get_content_td_attr(
-                      matrix,
-                      file_name_header_elem[file_name][index],
-                      he_col,
-                      dblclicked_tooltip_data,
-                      row_index,
-                      index_col,
-                    )}
-                  >
-                    {matrix.get_matrix_value(
-                      file_name_header_elem[file_name][index].matrix_key(),
-                      he_col.matrix_key(),
-                    ).mark ||
-                      "-"}
-                  </td>
-                ))}
-              </tr>,
-            );
-          })(sum_of_row);
-
-          sum_of_row += 1;
-        }
-      }
-      return table_content;
-    };
+    //const generate_table_content: () => JSX.Element[] = () => {
+    //  const table_content = [];
+    //  let sum_of_row = 0; // 表示した列の総数
+    //  for (const file_name in file_name_header_elem) {
+    //    for (const index in file_name_header_elem[file_name]) {
+    //      ((row_index) => {
+    //        table_content.push(
+    //          <tr key={`header_row_${row_index}`}>
+    //            {index === "0"
+    //              ? (
+    //                <td
+    //                  key={`header_row_${row_index}_col_0`}
+    //                  className="border text-center"
+    //                  rowSpan={file_name_header_elem[file_name].length}
+    //                >
+    //                  {file_name}
+    //                </td>
+    //              )
+    //              : ""}
+    //            <td
+    //              key={`header_row_${row_index}_col_1`}
+    //              className="border text-center"
+    //            >
+    //              {file_name_header_elem[file_name][index].repr()}
+    //            </td>
+    //            {header_elements.map((he_col, index_col) => (
+    //              <td
+    //                key={`content_row_${row_index}_col_${index_col}`}
+    //                className="border text-center"
+    //                onDoubleClick={() => {
+    //                  setDblclickTooltipId(
+    //                    {
+    //                      id: `content_row_${row_index}_col_${index_col}`,
+    //                      mark: tablePageInfo.get_matrix_value(
+    //                        file_name_header_elem[file_name][index]
+    //                          .matrix_key(),
+    //                        he_col.matrix_key(),
+    //                      ).mark ||
+    //                        "-",
+    //                      description: `${
+    //                        tablePageInfo.get_matrix_value(
+    //                          file_name_header_elem[file_name][index]
+    //                            .matrix_key(),
+    //                          he_col.matrix_key(),
+    //                        ).description
+    //                      }`,
+    //                      key_row: file_name_header_elem[file_name][index]
+    //                        .matrix_key(),
+    //                      key_col: he_col.matrix_key(),
+    //                    },
+    //                  );
+    //                }}
+    //                {...get_content_td_attr(
+    //                  tablePageInfo,
+    //                  file_name_header_elem[file_name][index],
+    //                  he_col,
+    //                  dblclickedTooltipData,
+    //                  row_index,
+    //                  index_col,
+    //                )}
+    //              >
+    //                {tablePageInfo.get_matrix_value(
+    //                  file_name_header_elem[file_name][index].matrix_key(),
+    //                  he_col.matrix_key(),
+    //                ).mark ||
+    //                  "-"}
+    //              </td>
+    //            ))}
+    //          </tr>,
+    //        );
+    //      })(sum_of_row);
+    //
+    //      sum_of_row += 1;
+    //    }
+    //  }
+    //  return table_content;
+    //};
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
@@ -544,118 +921,122 @@ const generate_table_page = (path: string) => {
         <label className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
           {path}
         </label>
-        <table className="table-fixed">
-          <thead>
-            <tr key="header_file_row_0">
-              {/* ファイル名を入れる Header 行を追加 */}
-              <td className="border text-center" key="header_row_0_col_0">
-                (空欄)
-              </td>
-              <td className="border text-center" key="header_row_0_col_1">
-                (空欄)
-              </td>
-              {Object.keys(file_name_header_elem).map((file_name, index) => (
-                <td
-                  className="border text-center"
-                  key={`header_row_0+col_${index + 2}`}
-                  colSpan={file_name_header_elem[file_name].length}
-                >
-                  {file_name}
-                </td>
-              ))}
-            </tr>
-            <tr key={"header_row_0"}>
-              <td className="border text-center" key="header_row_1_col_0">
-                (空欄)
-              </td>
-              <td className="border text-center" key="header_row_1_col_1">
-                (空欄)
-              </td>
-              {header_elements.map((e, index) => (
-                <td key={`header_row_1_col_${index + 2}`} className="border">
-                  {e.repr()}
-                </td>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {generate_table_content()}
-          </tbody>
-        </table>
-        {dblclicked_tooltip_data === undefined
-          ? <Tooltip id={"td-tooltip"} />
-          : (
-            <Tooltip
-              id={dblclicked_tooltip_data.id}
-              isOpen={true}
-              clickable={true}
-            >
-              <label
-                htmlFor="line_selection"
-                className="block text-sm font-light text-white dark:text-white"
-              >
-                影響状態
-              </label>
-              <select
-                id="line_selection"
-                className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                defaultValue={dblclicked_tooltip_data.mark}
-                onChange={dblclicked_tooltip_mark_change}
-              >
-                <option value="〇">〇</option>
-                <option value="-">-</option>
-              </select>
-              <label
-                htmlFor="description-input"
-                className="block text-sm font-light text-white dark:text-white"
-              >
-                説明
-              </label>
-              <input
-                type="text"
-                id="description-input"
-                className="block w-full text-gray-900 border border-gray-300 rounded-lg bg-gray-50 text-xs focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                defaultValue={dblclicked_tooltip_data.description}
-                onChange={dblclicked_tooltip_description_change}
-              />
-
-              <div className="mt-2 inline-flex justify-center">
-                <button
-                  onClick={() => {
-                    set_dblclick_tooltip_id(undefined); // ツールチップを戻す
-                  }}
-                  className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
-                >
-                  破棄して閉じる
-                </button>
-                <button
-                  onClick={() => {
-                    set_dblclick_tooltip_id(undefined); // ツールチップを戻す
-                    matrix.get_matrix_value(
-                      dblclicked_tooltip_data.key_row,
-                      dblclicked_tooltip_data.key_col,
-                    ).mark = dblclicked_tooltip_mark;
-                    matrix.get_matrix_value(
-                      dblclicked_tooltip_data.key_row,
-                      dblclicked_tooltip_data.key_col,
-                    ).description = dblclicked_tooltip_description;
-                    set_matrix(matrix);
-                  }}
-                  className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
-                >
-                  保存して閉じる
-                </button>
-              </div>
-            </Tooltip>
-          )}
+        {
+          new Table(tablePageInfo, setTablePageInfo).asJsx()
+          // <table className="table-fixed">
+          //   <thead>
+          //     <tr key="header_file_row_0">
+          //       {/* ファイル名を入れる Header 行を追加 */}
+          //       <td className="border text-center" key="header_row_0_col_0">
+          //         (空欄)
+          //       </td>
+          //       <td className="border text-center" key="header_row_0_col_1">
+          //         (空欄)
+          //       </td>
+          //       {Object.keys(file_name_header_elem).map((file_name, index) => (
+          //         <td
+          //           className="border text-center"
+          //           key={`header_row_0+col_${index + 2}`}
+          //           colSpan={file_name_header_elem[file_name].length}
+          //         >
+          //           {file_name}
+          //         </td>
+          //       ))}
+          //     </tr>
+          //     <tr key={"header_row_0"}>
+          //       <td className="border text-center" key="header_row_1_col_0">
+          //         (空欄)
+          //       </td>
+          //       <td className="border text-center" key="header_row_1_col_1">
+          //         (空欄)
+          //       </td>
+          //       {header_elements.map((e, index) => (
+          //         <td key={`header_row_1_col_${index + 2}`} className="border">
+          //           {e.repr()}
+          //         </td>
+          //       ))}
+          //     </tr>
+          //   </thead>
+          //   <tbody>
+          //     {generate_table_content()}
+          //   </tbody>
+          // </table>
+        }
+        {
+          //dblclickedTooltipData === undefined
+          // ? <Tooltip id={"td-tooltip"} />
+          // : (
+          //   <Tooltip
+          //     id={dblclickedTooltipData.id}
+          //     isOpen={true}
+          //     clickable={true}
+          //   >
+          //     <label
+          //       htmlFor="line_selection"
+          //       className="block text-sm font-light text-white dark:text-white"
+          //     >
+          //       影響状態
+          //     </label>
+          //     <select
+          //       id="line_selection"
+          //       className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+          //       defaultValue={dblclickedTooltipData.mark}
+          //       onChange={dblclicked_tooltip_mark_change}
+          //     >
+          //       <option value="〇">〇</option>
+          //       <option value="-">-</option>
+          //     </select>
+          //     <label
+          //       htmlFor="description-input"
+          //       className="block text-sm font-light text-white dark:text-white"
+          //     >
+          //       説明
+          //     </label>
+          //     <input
+          //       type="text"
+          //       id="description-input"
+          //       className="block w-full text-gray-900 border border-gray-300 rounded-lg bg-gray-50 text-xs focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+          //       defaultValue={dblclickedTooltipData.description}
+          //       onChange={dblclicked_tooltip_description_change}
+          //     />
+          //
+          //     <div className="mt-2 inline-flex justify-center">
+          //       <button
+          //         onClick={() => {
+          //           setDblclickTooltipId(undefined); // ツールチップを戻す
+          //         }}
+          //         className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
+          //       >
+          //         破棄して閉じる
+          //       </button>
+          //       <button
+          //         onClick={() => {
+          //           setDblclickTooltipId(undefined); // ツールチップを戻す
+          //           tablePageInfo.matrix.getMatrixValue(
+          //             dblclickedTooltipData.key_row,
+          //             dblclickedTooltipData.key_col,
+          //           ).mark = dblclicked_tooltip_mark;
+          //           tablePageInfo.matrix.getMatrixValue(
+          //             dblclickedTooltipData.key_row,
+          //             dblclickedTooltipData.key_col,
+          //           ).description = dblclickedTooltipDescription;
+          //           setTablePageInfo(tablePageInfo);
+          //         }}
+          //         className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
+          //       >
+          //         保存して閉じる
+          //       </button>
+          //     </div>
+          //   </Tooltip>
+          // )
+        }
         <button
           onClick={async () => {
-            await write_to_tablefile(matrix, read_file_info);
+            await writeToTableFile(tablePageInfo);
           }}
         >
           保存
         </button>
-        <p>{dblclicked_tooltip_data ? dblclicked_tooltip_data.id : ""}</p>
       </div>
     );
   };
