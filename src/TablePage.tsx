@@ -63,11 +63,15 @@ class Cell {
   attrs: { [attr: string]: string }; // 属性の名前: その設定値
   isActive: boolean;
   onClick: () => void;
+  onDblClick: () => void;
+  protected key: string;
 
-  constructor() {
+  constructor(key: string) {
     this.attrs = { "className": "border text-center" };
     this.isActive = true;
     this.onClick = () => {};
+    this.onDblClick = () => {};
+    this.key = key;
   }
 
   setValue(value: string) {
@@ -78,6 +82,10 @@ class Cell {
     this.onClick = onClick;
   }
 
+  setOnDblClick(onDblClick: () => void) {
+    this.onDblClick = onDblClick;
+  }
+
   setIsActive(isActive: boolean) {
     this.isActive = isActive;
   }
@@ -86,25 +94,38 @@ class Cell {
     return this.isActive;
   }
 
+  getKey(): string {
+    return this.key;
+  }
+
   setAttr(attr: string, value: string) {
     this.attrs[attr] = value;
   }
 
-  asJsx(key: string): JSX.Element {
+  asJsx(): JSX.Element {
     return (
-      <td key={key} onClick={this.onClick} {...this.attrs}>{this.value}</td>
+      <td
+        key={this.key}
+        onClick={this.onClick}
+        onDoubleClick={this.onDblClick}
+        {...this.attrs}
+      >
+        {this.value}
+      </td>
     );
   }
 }
 
 class HeaderCell extends Cell {
-  constructor() {
-    super();
+  constructor(key: string) {
+    super(key);
   }
 
-  asJsx(key: string): JSX.Element {
+  asJsx(): JSX.Element {
     return (
-      <th key={key} onClick={this.onClick} {...this.attrs}>{this.value}</th>
+      <th key={this.key} onClick={this.onClick} {...this.attrs}>
+        {this.value}
+      </th>
     );
   }
 }
@@ -115,13 +136,18 @@ class Table {
   tablePageInfo: TablePageInfo;
   dblClickedData: DblClickedData | undefined;
   update: Dispatch<SetStateAction<TablePageInfo>>;
+  updateDblClickedData: Dispatch<SetStateAction<DblClickedData | undefined>>;
 
   constructor(
     tablePageInfo: TablePageInfo,
+    dblClickedData: DblClickedData | undefined,
     update: Dispatch<SetStateAction<TablePageInfo>>,
+    updateDblClickedData: Dispatch<SetStateAction<DblClickedData | undefined>>,
   ) {
     this.tablePageInfo = tablePageInfo;
+    this.dblClickedData = dblClickedData;
     this.update = update;
+    this.updateDblClickedData = updateDblClickedData;
 
     let initRow: number = 2; // ヘッダーが 2 段になるので + 2
     let initCol: number = 2; // ヘッダーが 2 段になるので + 2
@@ -150,9 +176,9 @@ class Table {
       for (let j = 0; j < initCol; j++) {
         // 1 行目, 2 行目 は header
         if (i == 0 || i == 1 || j == 0 || j == 1) {
-          this.table[i].push(new HeaderCell());
+          this.table[i].push(new HeaderCell(`header_row_${i}_col_${j}`));
         } else {
-          this.table[i].push(new Cell());
+          this.table[i].push(new Cell(`content_row_${i}_col_${j}`));
         }
       }
     }
@@ -208,6 +234,10 @@ class Table {
 
   setValueAt(row: number, col: number, value: string) {
     this.table[row][col].setValue(value);
+  }
+
+  getKeyAt(row: number, col: number): string {
+    return this.table[row][col].getKey();
   }
 
   // (fromRow, fromCol) のセルから (toRow, toCol) までのセルを結合させる
@@ -365,6 +395,26 @@ class Table {
                 );
               }
 
+              if (this.dblClickedData === undefined) {
+                this
+                  .table[2 + fileBaseRow + contentRow][
+                    2 + fileBaseCol + contentCol
+                  ].setOnDblClick(
+                    ((updateDblClickedData: Dispatch<SetStateAction<DblClickedData | undefined>>, mark: string, key: string, description: string, heRowKey: string, heColKey: string) => {return () => {
+                    updateDblClickedData({
+                      id: key,
+                      mark: mark === "" ? "-" : "〇",
+                      description: description,
+                      key_row: heRowKey,
+                      key_col: heColKey,
+                    })}})(this.updateDblClickedData, mark, this.getKeyAt(2 + fileBaseRow + contentRow, 2 + fileBaseCol + contentCol), this.tablePageInfo.matrix.getMatrixValue(
+                      heRow.matrixKey(),
+                      heCol.matrixKey(),
+                    ).description, heRow.matrixKey(), heCol.matrixKey()));
+                  
+              } else {
+              }
+
               contentCol += 1;
             }
             contentCol = 0;
@@ -490,7 +540,7 @@ class Table {
       const thCols = [];
       for (const j in this.table[i]) {
         if (this.table[i][j].getIsActive()) {
-          thCols.push(this.table[i][j].asJsx(`row_${i}_col_${j}`));
+          thCols.push(this.table[i][j].asJsx());
         }
       }
       theadRows.push(<tr key={`row_${i}`}>{thCols}</tr>);
@@ -502,7 +552,7 @@ class Table {
       const tbodyCols: JSX.Element[] = [];
       for (const j in this.table[i]) {
         if (this.table[i][j].getIsActive()) {
-          tbodyCols.push(this.table[i][j].asJsx(`row_${i}_col_${j}`));
+          tbodyCols.push(this.table[i][j].asJsx());
         }
       }
       tbodyRows.push(<tr key={`row_${i}`}>{tbodyCols}</tr>);
@@ -723,23 +773,13 @@ const generate_table_page = (path: string) => {
     const [tablePageInfo, setTablePageInfo] = useState<TablePageInfo>(
       TablePageInfo.empty(),
     );
-    const [dblclickedTooltipData, setDblclickTooltipId] = useState<
+    const [dblClickedData, setDblClickedData] = useState<
       DblClickedData | undefined
     >(undefined);
-    const [dblclickedTooltipDescription, setDblclickedTooltipDescription] =
-      useState<string>("");
+
+    console.log(dblClickedData);
 
     // 変更ハンドラーを定義します
-
-    const [dblclicked_tooltip_mark, set_dblclicked_tooltip_mark] = useState<
-      string
-    >("");
-
-    const dblclicked_tooltip_mark_change = (
-      e: React.ChangeEvent<HTMLSelectElement>,
-    ) => {
-      set_dblclicked_tooltip_mark(e.target.value);
-    };
 
     const hasRun = useRef(false);
     const initialize = async () => {
@@ -922,7 +962,12 @@ const generate_table_page = (path: string) => {
           {path}
         </label>
         {
-          new Table(tablePageInfo, setTablePageInfo).asJsx()
+          new Table(
+            tablePageInfo,
+            dblClickedData,
+            setTablePageInfo,
+            setDblClickedData,
+          ).asJsx()
           // <table className="table-fixed">
           //   <thead>
           //     <tr key="header_file_row_0">
