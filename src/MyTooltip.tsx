@@ -6,7 +6,7 @@ interface MyTooltipProp {
   initDescription: string;
   initMark: string;
   cancelHandler: () => void;
-  dataSetHandler: (id: string, description: string, mark: string) => void;
+  dataSetHandler: (description: string, mark: string) => void;
 }
 
 const MyTooltip: React.FC<MyTooltipProp> = (
@@ -76,18 +76,7 @@ const MyTooltip: React.FC<MyTooltipProp> = (
         <button
           onClick={() => {
             cancelHandler(); // ツールチップを戻す
-            dataSetHandler(id, description, mark);
-            /*
-            tablePageInfo.matrix.getMatrixValue(
-              dblclickedTooltipData.key_row,
-              dblclickedTooltipData.key_col,
-            ).mark = dblclicked_tooltip_mark;
-            tablePageInfo.matrix.getMatrixValue(
-              dblclickedTooltipData.key_row,
-              dblclickedTooltipData.key_col,
-            ).description = dblclickedTooltipDescription;
-            setTablePageInfo(tablePageInfo);
-            */
+            dataSetHandler(description, mark);
           }}
           className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
         >

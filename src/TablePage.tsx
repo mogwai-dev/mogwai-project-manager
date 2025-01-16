@@ -196,8 +196,12 @@ class Table {
     value: string,
     description: string,
   ) {
-    this.table[row][col].setAttr("data-tooltip-id", "td-tooltip");
-    this.table[row][col].setAttr("data-tooltip-content", description);
+    if (this.dblClickedData === undefined) {
+      this.table[row][col].setAttr("data-tooltip-id", "td-tooltip");
+      this.table[row][col].setAttr("data-tooltip-content", description);
+    } else {
+      this.table[row][col].setAttr("data-tooltip-id", this.getKeyAt(row, col));
+    }
 
     this.table[row][col].setValue(value);
   }
@@ -400,19 +404,40 @@ class Table {
                   .table[2 + fileBaseRow + contentRow][
                     2 + fileBaseCol + contentCol
                   ].setOnDblClick(
-                    ((updateDblClickedData: Dispatch<SetStateAction<DblClickedData | undefined>>, mark: string, key: string, description: string, heRowKey: string, heColKey: string) => {return () => {
-                    updateDblClickedData({
-                      id: key,
-                      mark: mark === "" ? "-" : "〇",
-                      description: description,
-                      key_row: heRowKey,
-                      key_col: heColKey,
-                    })}})(this.updateDblClickedData, mark, this.getKeyAt(2 + fileBaseRow + contentRow, 2 + fileBaseCol + contentCol), this.tablePageInfo.matrix.getMatrixValue(
+                    ((
+                      updateDblClickedData: Dispatch<
+                        SetStateAction<DblClickedData | undefined>
+                      >,
+                      mark: string,
+                      key: string,
+                      description: string,
+                      heRowKey: string,
+                      heColKey: string,
+                    ) => {
+                      return () => {
+                        updateDblClickedData({
+                          id: key,
+                          mark: ( mark === "" || mark === "-" )? "-" : "〇",
+                          description: description,
+                          key_row: heRowKey,
+                          key_col: heColKey,
+                        });
+                      };
+                    })(
+                      this.updateDblClickedData,
+                      mark,
+                      this.getKeyAt(
+                        2 + fileBaseRow + contentRow,
+                        2 + fileBaseCol + contentCol,
+                      ),
+                      this.tablePageInfo.matrix.getMatrixValue(
+                        heRow.matrixKey(),
+                        heCol.matrixKey(),
+                      ).description,
                       heRow.matrixKey(),
                       heCol.matrixKey(),
-                    ).description, heRow.matrixKey(), heCol.matrixKey()));
-                  
-              } else {
+                    ),
+                  );
               }
 
               contentCol += 1;
@@ -559,13 +584,35 @@ class Table {
     }
 
     // Tooltip
-    const tooltip: JSX.Element = <Tooltip id={"td-tooltip"} />;
-    // if (this.dblClickedData === undefined) {
+    let tooltip: JSX.Element;
+    if (this.dblClickedData === undefined) {
+      console.log(589)
+      tooltip = <Tooltip id={"td-tooltip"} />;
+    } else {
+      console.log(591);
+      tooltip = (() => { return (
+        <MyTooltip
+          id={this.dblClickedData.id}
+          initDescription={this.dblClickedData.description}
+          initMark={this.dblClickedData.mark}
+          cancelHandler={() => {
+            this.updateDblClickedData(undefined);
+          }}
+          dataSetHandler={(description: string, mark: string) => {
+            this.tablePageInfo.matrix.getMatrixValue(
+              this.dblClickedData!.key_row,
+              this.dblClickedData!.key_col,
+            ).mark = mark;
+            this.tablePageInfo.matrix.getMatrixValue(
+              this.dblClickedData!.key_row,
+              this.dblClickedData!.key_col,
+            ).description = description;
+            this.update({...this.tablePageInfo});
 
-    //}
-    // else {
-    // tooltip = <MyTooltip />
-    // }
+            this.updateDblClickedData(undefined);
+          }}
+        /> )})();
+    }
 
     return (
       <div>
@@ -715,50 +762,6 @@ enum ReadState {
   ReadArrow,
 }
 
-// td の属性を取得する関数
-// 毎レンダーごとに呼ばれる
-function getContentTdAttr(
-  matrix: Matrix,
-  he_row: HeaderElement,
-  he_col: HeaderElement,
-  dblclicked_tooltip_data: DblClickedData | undefined,
-  index_row: number,
-  index_col: number,
-): { [attr_key: string]: string } {
-  if (
-    matrix.getMatrixValue(he_row.matrixKey(), he_col.matrixKey()).mark ===
-      "" ||
-    matrix.getMatrixValue(he_row.matrixKey(), he_col.matrixKey()).mark ===
-      "-"
-  ) {
-    if (dblclicked_tooltip_data === undefined) {
-      return {};
-    } else {
-      // ダブルクリックされた td が存在する
-      return {
-        "data-tooltip-id": `content_row_${index_row}_col_${index_col}`,
-      };
-    }
-  } else {
-    if (dblclicked_tooltip_data === undefined) {
-      return {
-        "data-tooltip-id": "td-tooltip",
-        "data-tooltip-content": `${
-          matrix.getMatrixValue(
-            he_row.matrixKey(),
-            he_col.matrixKey(),
-          ).description
-        } ※ダブルクリックで編集できます`,
-      };
-    } else {
-      // ダブルクリックされた td が存在する
-      return {
-        "data-tooltip-id": `content_row_${index_row}_col_${index_col}`,
-      };
-    }
-  }
-}
-
 interface DblClickedData {
   id: string;
   mark: string;
@@ -777,8 +780,7 @@ const generate_table_page = (path: string) => {
       DblClickedData | undefined
     >(undefined);
 
-    console.log(dblClickedData);
-
+    console.log(782);
     // 変更ハンドラーを定義します
 
     const hasRun = useRef(false);
