@@ -238,6 +238,7 @@ class Table {
 
   setValueAt(row: number, col: number, value: string) {
     this.table[row][col].setValue(value);
+    this.table[row][col].setAttr("data-tooltip-id", this.getKeyAt(row, col));
   }
 
   getKeyAt(row: number, col: number): string {
@@ -586,11 +587,13 @@ class Table {
     // Tooltip
     let tooltip: JSX.Element;
     if (this.dblClickedData === undefined) {
-      console.log(589)
+
       tooltip = <Tooltip id={"td-tooltip"} />;
+
     } else {
-      console.log(591);
+
       tooltip = (() => { return (
+        
         <MyTooltip
           id={this.dblClickedData.id}
           initDescription={this.dblClickedData.description}
@@ -780,7 +783,6 @@ const generate_table_page = (path: string) => {
       DblClickedData | undefined
     >(undefined);
 
-    console.log(782);
     // 変更ハンドラーを定義します
 
     const hasRun = useRef(false);
@@ -960,9 +962,9 @@ const generate_table_page = (path: string) => {
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
       <div className="mx-2">
-        <label className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
+        <p className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
           {path}
-        </label>
+        </p>
         {
           new Table(
             tablePageInfo,
