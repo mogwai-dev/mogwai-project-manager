@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { Dispatch, FC, SetStateAction, useEffect, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { Tooltip } from "react-tooltip";
@@ -773,8 +773,11 @@ interface DblClickedData {
   key_col: string;
 }
 
-const generate_table_page = (path: string) => {
-  return () => {
+interface TablePageProp {
+  path: string;
+}
+
+export const TablePage: FC<TablePageProp> = ( { path }) => {
     /* 状態管理 */
     const [tablePageInfo, setTablePageInfo] = useState<TablePageInfo>(
       TablePageInfo.empty(),
@@ -878,86 +881,9 @@ const generate_table_page = (path: string) => {
         hasRun.current = true;
         initialize();
       }
+      
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    // tbody を生成
-    //const generate_table_content: () => JSX.Element[] = () => {
-    //  const table_content = [];
-    //  let sum_of_row = 0; // 表示した列の総数
-    //  for (const file_name in file_name_header_elem) {
-    //    for (const index in file_name_header_elem[file_name]) {
-    //      ((row_index) => {
-    //        table_content.push(
-    //          <tr key={`header_row_${row_index}`}>
-    //            {index === "0"
-    //              ? (
-    //                <td
-    //                  key={`header_row_${row_index}_col_0`}
-    //                  className="border text-center"
-    //                  rowSpan={file_name_header_elem[file_name].length}
-    //                >
-    //                  {file_name}
-    //                </td>
-    //              )
-    //              : ""}
-    //            <td
-    //              key={`header_row_${row_index}_col_1`}
-    //              className="border text-center"
-    //            >
-    //              {file_name_header_elem[file_name][index].repr()}
-    //            </td>
-    //            {header_elements.map((he_col, index_col) => (
-    //              <td
-    //                key={`content_row_${row_index}_col_${index_col}`}
-    //                className="border text-center"
-    //                onDoubleClick={() => {
-    //                  setDblclickTooltipId(
-    //                    {
-    //                      id: `content_row_${row_index}_col_${index_col}`,
-    //                      mark: tablePageInfo.get_matrix_value(
-    //                        file_name_header_elem[file_name][index]
-    //                          .matrix_key(),
-    //                        he_col.matrix_key(),
-    //                      ).mark ||
-    //                        "-",
-    //                      description: `${
-    //                        tablePageInfo.get_matrix_value(
-    //                          file_name_header_elem[file_name][index]
-    //                            .matrix_key(),
-    //                          he_col.matrix_key(),
-    //                        ).description
-    //                      }`,
-    //                      key_row: file_name_header_elem[file_name][index]
-    //                        .matrix_key(),
-    //                      key_col: he_col.matrix_key(),
-    //                    },
-    //                  );
-    //                }}
-    //                {...get_content_td_attr(
-    //                  tablePageInfo,
-    //                  file_name_header_elem[file_name][index],
-    //                  he_col,
-    //                  dblclickedTooltipData,
-    //                  row_index,
-    //                  index_col,
-    //                )}
-    //              >
-    //                {tablePageInfo.get_matrix_value(
-    //                  file_name_header_elem[file_name][index].matrix_key(),
-    //                  he_col.matrix_key(),
-    //                ).mark ||
-    //                  "-"}
-    //              </td>
-    //            ))}
-    //          </tr>,
-    //        );
-    //      })(sum_of_row);
-    //
-    //      sum_of_row += 1;
-    //    }
-    //  }
-    //  return table_content;
-    //};
 
     // 空の依存配列により、コンポーネントのマウント時にのみ実行される
     return (
@@ -982,7 +908,4 @@ const generate_table_page = (path: string) => {
         </button>
       </div>
     );
-  };
 };
-
-export default generate_table_page;

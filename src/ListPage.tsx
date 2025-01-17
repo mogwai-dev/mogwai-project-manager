@@ -1,18 +1,21 @@
-import { useState } from "react";
+import { FC, useState } from "react";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
+export interface ListPageProp {
+  text: string,
+  path: string,
+}
 
-const generate_list_page = (text: string, path: string) => {
-  return () => {
-    const [textarea_value, set_textarea_value] = useState(text);
-    const [last_textarea_value, set_last_textarea_value] = useState(text); // 最後にセーブボタンを押された文字列
+export const ListPage: FC<ListPageProp> = ( { text, path } ) => {
+    const [textareaValue, setTextareaValue] = useState<string>(text);
+    const [lastTextareaValue, setLastTextareaValue] = useState<string>(text); // 最後にセーブボタンを押された文字列
 
-    const has_difference = textarea_value !== last_textarea_value;
+    const hasDifference = textareaValue !== lastTextareaValue;
 
-    const class_when_has_diff = has_difference
+    const classWhenHasDiff = hasDifference
       ? "border-orange-300"
       : "border-gray-300";
-    const button_class_when_has_diff = has_difference
+    const buttonClassWhenHasDiff = hasDifference
       ? "bg-orange-500 hover:bg-orange-700"
       : "bg-gray-500";
 
@@ -27,27 +30,26 @@ const generate_list_page = (text: string, path: string) => {
         <textarea
           id="message"
           rows={4}
-          className={`block my-2 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${class_when_has_diff} focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500`}
-          placeholder={textarea_value}
-          value={textarea_value}
+          className={`block my-2 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${classWhenHasDiff} focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500`}
+          placeholder={textareaValue}
+          value={textareaValue}
           onChange={(e) => {
-            set_textarea_value(e.target.value);
+            setTextareaValue(e.target.value);
           }}
         >
         </textarea>
         <button
-          disabled={!has_difference}
-          className={`my-1 ${button_class_when_has_diff} text-white font-bold py-1 px-2 rounded-full text-sm`}
+          disabled={!hasDifference}
+          className={`my-1 ${buttonClassWhenHasDiff} text-white font-bold py-1 px-2 rounded-full text-sm`}
           onClick={async () => {
-            set_last_textarea_value(textarea_value);
-            await writeTextFile(path, textarea_value);
+            setLastTextareaValue(textareaValue);
+            await writeTextFile(path, textareaValue);
           }}
         >
           save
         </button>
       </div>
     );
-  };
 };
 
-export default generate_list_page;
+
