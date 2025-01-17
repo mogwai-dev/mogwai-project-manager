@@ -28,23 +28,23 @@ async function joinPath(dirPath: string, fileName: string): Promise<string> {
 async function writeToTableFile(
   tablePageInfo: TablePageInfo,
 ) {
-  let write_content = "' リストファイル一覧\n";
+  let writeContent = "' リストファイル一覧\n";
 
   for (const read_file_name of tablePageInfo.headerInfo.keys()) {
-    write_content += `' ${read_file_name} \n`;
+    writeContent += `' ${read_file_name} \n`;
   }
 
   // 空行
-  write_content += "\n";
+  writeContent += "\n";
 
-  for (const row_key in tablePageInfo.matrix) {
-    for (const col_key in tablePageInfo.matrix.matrix[row_key]) {
+  for (const rowKey in tablePageInfo.matrix.matrix) {
+    for (const colKey in tablePageInfo.matrix.matrix[rowKey]) {
+      console.log(rowKey, colKey)
       if (
-        tablePageInfo.matrix.matrix[row_key][col_key].mark !== "-" &&
-        tablePageInfo.matrix.matrix[row_key][col_key].mark !== ""
+        tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "" && tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "-"
       ) {
-        write_content += `${row_key} --> ${col_key} ' ${
-          tablePageInfo.matrix.matrix[row_key][col_key].description.replace(
+        writeContent += `${rowKey} --> ${colKey} ' ${
+          tablePageInfo.matrix.matrix[rowKey][colKey].description.replace(
             "\r\n",
             " ",
           )
@@ -54,7 +54,7 @@ async function writeToTableFile(
     }
   }
 
-  await writeTextFile(tablePageInfo.tableFilePath, write_content);
+  await writeTextFile(tablePageInfo.tableFilePath, writeContent);
 }
 
 // テーブルのセル
@@ -972,112 +972,6 @@ const generate_table_page = (path: string) => {
             setTablePageInfo,
             setDblClickedData,
           ).asJsx()
-          // <table className="table-fixed">
-          //   <thead>
-          //     <tr key="header_file_row_0">
-          //       {/* ファイル名を入れる Header 行を追加 */}
-          //       <td className="border text-center" key="header_row_0_col_0">
-          //         (空欄)
-          //       </td>
-          //       <td className="border text-center" key="header_row_0_col_1">
-          //         (空欄)
-          //       </td>
-          //       {Object.keys(file_name_header_elem).map((file_name, index) => (
-          //         <td
-          //           className="border text-center"
-          //           key={`header_row_0+col_${index + 2}`}
-          //           colSpan={file_name_header_elem[file_name].length}
-          //         >
-          //           {file_name}
-          //         </td>
-          //       ))}
-          //     </tr>
-          //     <tr key={"header_row_0"}>
-          //       <td className="border text-center" key="header_row_1_col_0">
-          //         (空欄)
-          //       </td>
-          //       <td className="border text-center" key="header_row_1_col_1">
-          //         (空欄)
-          //       </td>
-          //       {header_elements.map((e, index) => (
-          //         <td key={`header_row_1_col_${index + 2}`} className="border">
-          //           {e.repr()}
-          //         </td>
-          //       ))}
-          //     </tr>
-          //   </thead>
-          //   <tbody>
-          //     {generate_table_content()}
-          //   </tbody>
-          // </table>
-        }
-        {
-          //dblclickedTooltipData === undefined
-          // ? <Tooltip id={"td-tooltip"} />
-          // : (
-          //   <Tooltip
-          //     id={dblclickedTooltipData.id}
-          //     isOpen={true}
-          //     clickable={true}
-          //   >
-          //     <label
-          //       htmlFor="line_selection"
-          //       className="block text-sm font-light text-white dark:text-white"
-          //     >
-          //       影響状態
-          //     </label>
-          //     <select
-          //       id="line_selection"
-          //       className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-          //       defaultValue={dblclickedTooltipData.mark}
-          //       onChange={dblclicked_tooltip_mark_change}
-          //     >
-          //       <option value="〇">〇</option>
-          //       <option value="-">-</option>
-          //     </select>
-          //     <label
-          //       htmlFor="description-input"
-          //       className="block text-sm font-light text-white dark:text-white"
-          //     >
-          //       説明
-          //     </label>
-          //     <input
-          //       type="text"
-          //       id="description-input"
-          //       className="block w-full text-gray-900 border border-gray-300 rounded-lg bg-gray-50 text-xs focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-          //       defaultValue={dblclickedTooltipData.description}
-          //       onChange={dblclicked_tooltip_description_change}
-          //     />
-          //
-          //     <div className="mt-2 inline-flex justify-center">
-          //       <button
-          //         onClick={() => {
-          //           setDblclickTooltipId(undefined); // ツールチップを戻す
-          //         }}
-          //         className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
-          //       >
-          //         破棄して閉じる
-          //       </button>
-          //       <button
-          //         onClick={() => {
-          //           setDblclickTooltipId(undefined); // ツールチップを戻す
-          //           tablePageInfo.matrix.getMatrixValue(
-          //             dblclickedTooltipData.key_row,
-          //             dblclickedTooltipData.key_col,
-          //           ).mark = dblclicked_tooltip_mark;
-          //           tablePageInfo.matrix.getMatrixValue(
-          //             dblclickedTooltipData.key_row,
-          //             dblclickedTooltipData.key_col,
-          //           ).description = dblclickedTooltipDescription;
-          //           setTablePageInfo(tablePageInfo);
-          //         }}
-          //         className="px-1 py-1 text-xs text-white border border-gray-300 rounded-md"
-          //       >
-          //         保存して閉じる
-          //       </button>
-          //     </div>
-          //   </Tooltip>
-          // )
         }
         <button
           onClick={async () => {
