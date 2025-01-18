@@ -869,7 +869,7 @@ class Matrix {
       const fromNodeKey: string = stack.pop()!
       visited[fromNodeKey] = true;
       for (const toNodeKey in reversedMatrix[fromNodeKey]) {
-        this.matrix[fromNodeKey][toNodeKey].shouldPaintSelf = true;
+        this.matrix[toNodeKey][fromNodeKey].shouldPaintSelf = true;
         if (!visited[toNodeKey]) {
           stack.push(toNodeKey); 
         }
