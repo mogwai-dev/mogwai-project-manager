@@ -1,4 +1,11 @@
-import { Dispatch, FC, SetStateAction, useEffect, useRef, useState } from "react";
+import {
+  Dispatch,
+  FC,
+  SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { Tooltip } from "react-tooltip";
@@ -39,9 +46,10 @@ async function writeToTableFile(
 
   for (const rowKey in tablePageInfo.matrix.matrix) {
     for (const colKey in tablePageInfo.matrix.matrix[rowKey]) {
-      console.log(rowKey, colKey)
+      console.log(rowKey, colKey);
       if (
-        tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "" && tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "-"
+        tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "" &&
+        tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "-"
       ) {
         writeContent += `${rowKey} --> ${colKey} ' ${
           tablePageInfo.matrix.matrix[rowKey][colKey].description.replace(
@@ -102,6 +110,10 @@ class Cell {
     this.attrs[attr] = value;
   }
 
+  paintSelf() {
+    this.attrs["className"] += " bg-orange-100";
+  }
+
   asJsx(): JSX.Element {
     return (
       <td
@@ -130,6 +142,11 @@ class HeaderCell extends Cell {
   }
 }
 
+interface ClickedPosition {
+  row: number,
+  col: number,
+}
+
 // テーブル
 class Table {
   table: Cell[][];
@@ -137,6 +154,8 @@ class Table {
   dblClickedData: DblClickedData | undefined;
   update: Dispatch<SetStateAction<TablePageInfo>>;
   updateDblClickedData: Dispatch<SetStateAction<DblClickedData | undefined>>;
+
+
 
   constructor(
     tablePageInfo: TablePageInfo,
@@ -148,6 +167,7 @@ class Table {
     this.dblClickedData = dblClickedData;
     this.update = update;
     this.updateDblClickedData = updateDblClickedData;
+
 
     let initRow: number = 2; // ヘッダーが 2 段になるので + 2
     let initCol: number = 2; // ヘッダーが 2 段になるので + 2
@@ -221,6 +241,44 @@ class Table {
     }
   }
 
+  setContentOnClick(row: number, col: number, ColKey: string) {
+    let onClick: ()=>void;
+
+    if (this.tablePageInfo.impactScopeDisplayMode) {
+
+      if (this.tablePageInfo.clickedPosition.row === row && this.tablePageInfo.clickedPosition.col === col) {
+
+        onClick = () => {
+          /* なにもしない */
+        }
+
+      }
+      else {
+        
+        /* クリックされた別のところがクリックされた */
+        onClick = () => {
+          this.tablePageInfo.impactScopeDisplayMode = false;
+          this.tablePageInfo.matrix.clearImpactScope();
+          this.update({...this.tablePageInfo});
+        }
+
+      }
+
+    }
+    else {
+      onClick = () => {
+        this.tablePageInfo.impactScopeDisplayMode = true;
+        this.tablePageInfo.matrix.calcurateImpactScope(ColKey);
+        this.tablePageInfo.clickedPosition.row = row;
+        this.tablePageInfo.clickedPosition.col = col;
+        this.update({...this.tablePageInfo});
+      }
+
+    }
+
+    this.table[row][col].setOnClick(onClick);
+  }
+
   setFileNameAtRow(row: number, col: number, fileName: string) {
     const onClick: () => void = () => {
       this.tablePageInfo.headerInfo.get(fileName)!.isRowOpen = !this
@@ -243,6 +301,10 @@ class Table {
 
   getKeyAt(row: number, col: number): string {
     return this.table[row][col].getKey();
+  }
+
+  paintAt(row: number, col: number) {
+    this.table[row][col].paintSelf();
   }
 
   // (fromRow, fromCol) のセルから (toRow, toCol) までのセルを結合させる
@@ -372,31 +434,36 @@ class Table {
               const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
                 .headerElements
             ) {
-              const mark = this.tablePageInfo.matrix.getMatrixValue(
-                heRow.matrixKey(),
-                heCol.matrixKey(),
-              ).mark;
+              const matrixValue: MatrixValue = this.tablePageInfo.matrix
+                .getMatrixValue(
+                  heRow.matrixKey(),
+                  heCol.matrixKey(),
+                );
 
-              if (mark === "-" || mark === "") {
+              if (matrixValue.mark === "-" || matrixValue.mark === "") {
                 this.setValueAt(
                   2 + fileBaseRow + contentRow,
                   2 + fileBaseCol + contentCol,
-                  mark,
+                  matrixValue.mark,
                 );
               } else {
                 this.setContentValueAt(
                   2 + fileBaseRow + contentRow,
                   2 + fileBaseCol + contentCol,
-                  this.tablePageInfo.matrix.getMatrixValue(
-                    heRow.matrixKey(),
-                    heCol.matrixKey(),
-                  ).mark,
-                  `${
-                    this.tablePageInfo.matrix.getMatrixValue(
-                      heRow.matrixKey(),
-                      heCol.matrixKey(),
-                    ).description
-                  } ※ ダブルクリックで編集`,
+                  matrixValue.mark,
+                  `${matrixValue.description} ※ ダブルクリックで編集`,
+                );
+              }
+
+              this.setContentOnClick(
+                2 + fileBaseRow + contentRow,
+                2 + fileBaseCol + contentCol,
+                heCol.matrixKey());
+
+              if (this.tablePageInfo.impactScopeDisplayMode && matrixValue.shouldPaintSelf) {
+                this.paintAt(
+                  2 + fileBaseRow + contentRow,
+                  2 + fileBaseCol + contentCol,
                 );
               }
 
@@ -418,7 +485,7 @@ class Table {
                       return () => {
                         updateDblClickedData({
                           id: key,
-                          mark: ( mark === "" || mark === "-" )? "-" : "〇",
+                          mark: (mark === "" || mark === "-") ? "-" : "〇",
                           description: description,
                           key_row: heRowKey,
                           key_col: heColKey,
@@ -426,15 +493,12 @@ class Table {
                       };
                     })(
                       this.updateDblClickedData,
-                      mark,
+                      matrixValue.mark,
                       this.getKeyAt(
                         2 + fileBaseRow + contentRow,
                         2 + fileBaseCol + contentCol,
                       ),
-                      this.tablePageInfo.matrix.getMatrixValue(
-                        heRow.matrixKey(),
-                        heCol.matrixKey(),
-                      ).description,
+                      matrixValue.description,
                       heRow.matrixKey(),
                       heCol.matrixKey(),
                     ),
@@ -457,24 +521,39 @@ class Table {
               .headerElements
           ) {
             let combinedMark = "-";
+            let combinedShouldPaint = false; // 塗るべきかどうか
             for (
               const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
                 .headerElements
             ) {
+              const matrixValue = this.tablePageInfo.matrix.getMatrixValue(
+                heRow.matrixKey(),
+                heCol.matrixKey(),
+              );
               if (
-                this.tablePageInfo.matrix.getMatrixValue(
-                  heRow.matrixKey(),
-                  heCol.matrixKey(),
-                ).mark === "〇"
+                matrixValue.mark === "〇"
               ) {
                 combinedMark = "〇";
               }
+
+              // 塗るべきかどうか
+              combinedShouldPaint ||= matrixValue.shouldPaintSelf;
             }
+
             this.setValueAt(
               2 + fileBaseRow + contentRow,
               2 + fileBaseCol + contentCol,
               combinedMark,
             );
+
+
+            if (this.tablePageInfo.impactScopeDisplayMode && combinedShouldPaint) {
+              this.paintAt(
+                2 + fileBaseRow + contentRow,
+                2 + fileBaseCol + contentCol,
+              );
+            }
+
             contentRow += 1;
           }
 
@@ -489,29 +568,46 @@ class Table {
               .headerElements
           ) {
             let combinedMark = "-";
+            let combinedShouldPaint = false; // 塗るべきかどうか
             for (
               const heRow of this.tablePageInfo.headerInfo.get(fileNameRow)!
                 .headerElements
             ) {
+              const matrixValue = this.tablePageInfo.matrix.getMatrixValue(
+                heRow.matrixKey(),
+                heCol.matrixKey(),
+              );
+
               if (
-                this.tablePageInfo.matrix.getMatrixValue(
-                  heRow.matrixKey(),
-                  heCol.matrixKey(),
-                ).mark === "〇"
+                matrixValue.mark === "〇"
               ) {
                 combinedMark = "〇";
               }
+
+              combinedShouldPaint ||= matrixValue.shouldPaintSelf;
+
             }
             this.setValueAt(
               2 + fileBaseRow + contentRow,
               2 + fileBaseCol + contentCol,
               combinedMark,
             );
+
+            // 塗るべきかどうか判断
+            if (this.tablePageInfo.impactScopeDisplayMode && combinedShouldPaint) {
+              this.paintAt(
+                2 + fileBaseRow + contentRow,
+                2 + fileBaseCol + contentCol,
+              );
+            }
+
             contentCol += 1;
           }
           contentRow += 1;
         } else {
           let combinedMark = "-";
+          let combinedShouldPaint = false;
+
           for (
             const heRow of this.tablePageInfo.headerInfo.get(fileNameCol)!
               .headerElements
@@ -520,21 +616,35 @@ class Table {
               const heCol of this.tablePageInfo.headerInfo.get(fileNameCol)!
                 .headerElements
             ) {
+              const matrixValue = this.tablePageInfo.matrix.getMatrixValue(
+                heRow.matrixKey(),
+                heCol.matrixKey(),
+              );
+
               if (
-                this.tablePageInfo.matrix.getMatrixValue(
-                  heRow.matrixKey(),
-                  heCol.matrixKey(),
-                ).mark === "〇"
+                matrixValue.mark === "〇"
               ) {
                 combinedMark = "〇";
               }
+
+              combinedShouldPaint ||= matrixValue.shouldPaintSelf;
             }
           }
+
           this.setValueAt(
             2 + fileBaseRow + contentRow,
             2 + fileBaseCol + contentCol,
             combinedMark,
           );
+
+          // 塗るべきかどうか判断
+          if (this.tablePageInfo.impactScopeDisplayMode && combinedShouldPaint) {
+            this.paintAt(
+              2 + fileBaseRow + contentRow,
+              2 + fileBaseCol + contentCol,
+            );
+          }
+
           contentRow += 1;
           contentCol += 1;
         }
@@ -587,34 +697,33 @@ class Table {
     // Tooltip
     let tooltip: JSX.Element;
     if (this.dblClickedData === undefined) {
-
       tooltip = <Tooltip id={"td-tooltip"} />;
-
     } else {
+      tooltip = (() => {
+        return (
+          <MyTooltip
+            id={this.dblClickedData.id}
+            initDescription={this.dblClickedData.description}
+            initMark={this.dblClickedData.mark}
+            cancelHandler={() => {
+              this.updateDblClickedData(undefined);
+            }}
+            dataSetHandler={(description: string, mark: string) => {
+              this.tablePageInfo.matrix.getMatrixValue(
+                this.dblClickedData!.key_row,
+                this.dblClickedData!.key_col,
+              ).mark = mark;
+              this.tablePageInfo.matrix.getMatrixValue(
+                this.dblClickedData!.key_row,
+                this.dblClickedData!.key_col,
+              ).description = description;
+              this.update({ ...this.tablePageInfo });
 
-      tooltip = (() => { return (
-        
-        <MyTooltip
-          id={this.dblClickedData.id}
-          initDescription={this.dblClickedData.description}
-          initMark={this.dblClickedData.mark}
-          cancelHandler={() => {
-            this.updateDblClickedData(undefined);
-          }}
-          dataSetHandler={(description: string, mark: string) => {
-            this.tablePageInfo.matrix.getMatrixValue(
-              this.dblClickedData!.key_row,
-              this.dblClickedData!.key_col,
-            ).mark = mark;
-            this.tablePageInfo.matrix.getMatrixValue(
-              this.dblClickedData!.key_row,
-              this.dblClickedData!.key_col,
-            ).description = description;
-            this.update({...this.tablePageInfo});
-
-            this.updateDblClickedData(undefined);
-          }}
-        /> )})();
+              this.updateDblClickedData(undefined);
+            }}
+          />
+        );
+      })();
     }
 
     return (
@@ -682,8 +791,15 @@ function extractHeaderElement(
 }
 
 // matrix["x.list:1"]["y.list:1"] = 'o' みたいな....
-type MatrixValue = { mark: string; description: string };
+type MatrixValue = { mark: string; description: string; shouldPaintSelf: boolean };
 class Matrix {
+  clearImpactScope() {
+    for (const rowKey in this.matrix) {
+      for (const colKey in this.matrix[rowKey]) {
+        this.matrix[rowKey][colKey].shouldPaintSelf = false;
+      }
+    }
+  }
   matrix: { [rowKey: string]: { [columnKey: string]: MatrixValue } };
 
   constructor() {
@@ -708,13 +824,12 @@ class Matrix {
       this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`] = {
         mark: "",
         description: "",
+        shouldPaintSelf: false,
       };
     }
 
-    this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`] = {
-      mark,
-      description,
-    };
+    this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`].mark = mark;
+    this.matrix[`${fileNameFrom}:${idFrom}`][`${fileNameTo}:${idTo}`].description = description;
   }
 
   getMatrixValue(
@@ -726,10 +841,41 @@ class Matrix {
     }
 
     if (!this.matrix[key_from][key_to]) {
-      this.matrix[key_from][key_to] = { mark: "-", description: "" };
+      this.matrix[key_from][key_to] = { mark: "-", description: "", shouldPaintSelf: false };
     }
 
     return this.matrix[key_from][key_to];
+  }
+
+  calcurateImpactScope(startNodeKey: string) {
+    const visited: { [key: string]: boolean } = {};
+    const reversedMatrix: { [rowKey: string]: {[colKey: string]: boolean}} = {}; // true だったら線あり
+
+    for (const rowKey in this.matrix) {
+      for (const colKey in this.matrix[rowKey]) {
+        if (this.matrix[rowKey][colKey].mark === "〇") {
+          if (reversedMatrix[colKey] === undefined) {
+            reversedMatrix[colKey] = {}
+          }
+          reversedMatrix[colKey][rowKey] = true;
+          visited[rowKey] = false;
+          visited[colKey] = false;
+        }
+      }
+    }
+
+    const stack: string[] = [startNodeKey]
+
+    while (stack.length !== 0) {
+      const fromNodeKey: string = stack.pop()!
+      visited[fromNodeKey] = true;
+      for (const toNodeKey in reversedMatrix[fromNodeKey]) {
+        this.matrix[fromNodeKey][toNodeKey].shouldPaintSelf = true;
+        if (!visited[toNodeKey]) {
+          stack.push(toNodeKey); 
+        }
+      }
+    }
   }
 }
 
@@ -743,19 +889,24 @@ class TablePageInfo {
   matrix: Matrix; // ヘッダーを含まない行列の値
   headerInfo: HeaderInfo;
   tableFilePath: string;
+  impactScopeDisplayMode: boolean;
+  clickedPosition: ClickedPosition;
 
   static empty(): TablePageInfo {
     return new TablePageInfo(
       new Matrix(),
       new Map(),
       "",
+      false
     );
   }
 
-  constructor(matrix: Matrix, headerInfo: HeaderInfo, tableFilePath: string) {
+  constructor(matrix: Matrix, headerInfo: HeaderInfo, tableFilePath: string, impactScopeDisplayMode: boolean) {
     this.matrix = matrix;
     this.headerInfo = headerInfo;
     this.tableFilePath = tableFilePath;
+    this.impactScopeDisplayMode = impactScopeDisplayMode;
+    this.clickedPosition = { row: -1, col: -1 };
   }
 }
 
@@ -777,135 +928,133 @@ interface TablePageProp {
   path: string;
 }
 
-export const TablePage: FC<TablePageProp> = ( { path }) => {
-    /* 状態管理 */
-    const [tablePageInfo, setTablePageInfo] = useState<TablePageInfo>(
-      TablePageInfo.empty(),
-    );
-    const [dblClickedData, setDblClickedData] = useState<
-      DblClickedData | undefined
-    >(undefined);
+export const TablePage: FC<TablePageProp> = ({ path }) => {
+  /* 状態管理 */
+  const [tablePageInfo, setTablePageInfo] = useState<TablePageInfo>(
+    TablePageInfo.empty(),
+  );
+  const [dblClickedData, setDblClickedData] = useState<
+    DblClickedData | undefined
+  >(undefined);
 
-    // 変更ハンドラーを定義します
+  // 変更ハンドラーを定義します
 
-    const hasRun = useRef(false);
-    const initialize = async () => {
-      const matrixTmp: Matrix = new Matrix();
-      const headerInfo: HeaderInfo = new Map();
+  const hasRun = useRef(false);
+  const initialize = async () => {
+    const matrixTmp: Matrix = new Matrix();
+    const headerInfo: HeaderInfo = new Map();
 
-      const text = await readTextFile(path);
+    const text = await readTextFile(path);
 
-      // path を保存しておく
-      const readTableFilePath = path;
+    // path を保存しておく
+    const readTableFilePath = path;
 
-      // 先頭のコメントを読み込むが
-      // 1 行目は飛ばす
-      let readState: ReadState = ReadState.SkipInitialLine;
-      const splited = text.split("\n").map((line) => line.trim());
-      let lineNum = 0; // 現在読んでいる行数
+    // 先頭のコメントを読み込むが
+    // 1 行目は飛ばす
+    let readState: ReadState = ReadState.SkipInitialLine;
+    const splited = text.split("\n").map((line) => line.trim());
+    let lineNum = 0; // 現在読んでいる行数
 
-      // 現在読んでいる行数が "\n" で分けた行数より大きくなったら終わり
-      while (lineNum < splited.length) {
-        const line = splited[lineNum];
+    // 現在読んでいる行数が "\n" で分けた行数より大きくなったら終わり
+    while (lineNum < splited.length) {
+      const line = splited[lineNum];
 
-        if (readState === ReadState.SkipInitialLine) {
-          readState = ReadState.ReadFileName;
+      if (readState === ReadState.SkipInitialLine) {
+        readState = ReadState.ReadFileName;
+        lineNum += 1;
+      } else if (readState === ReadState.ReadFileName) {
+        if (line.startsWith("'")) {
+          const fileName = line.slice(1).trim(); // 1 文字目以降を取得
+          const dirName = await getDir(path);
+          const filePath = await joinPath(dirName, fileName);
+
+          const listText = await readTextFile(filePath);
+
+          headerInfo.set(fileName, {
+            headerElements: extractHeaderElement(fileName, listText),
+            isRowOpen: true,
+            isColOpen: true,
+          });
+
           lineNum += 1;
-        } else if (readState === ReadState.ReadFileName) {
-          if (line.startsWith("'")) {
-            const fileName = line.slice(1).trim(); // 1 文字目以降を取得
-            const dirName = await getDir(path);
-            const filePath = await joinPath(dirName, fileName);
+        } else {
+          readState = ReadState.ReadArrow;
+        }
+      } else if (readState === ReadState.ReadArrow) {
+        if (line.includes("-->") || line.includes("<--")) {
+          const splitedWithSpace = line.split(" ");
 
-            const listText = await readTextFile(filePath);
+          const [fileNameLeft, idLeft] = splitedWithSpace[0].split(":");
+          const [fileNameRight, idRight] = splitedWithSpace[2].split(
+            ":",
+          );
 
-            headerInfo.set(fileName, {
-              headerElements: extractHeaderElement(fileName, listText),
-              isRowOpen: true,
-              isColOpen: true,
-            });
-
-            lineNum += 1;
+          let description;
+          // コメントの抽出(簡易版)
+          if (line.includes("'")) {
+            description = line.slice(line.lastIndexOf("'")).slice(1).trim();
           } else {
-            readState = ReadState.ReadArrow;
+            description = "";
           }
-        } else if (readState === ReadState.ReadArrow) {
-          if (line.includes("-->") || line.includes("<--")) {
-            const splitedWithSpace = line.split(" ");
 
-            const [fileNameLeft, idLeft] = splitedWithSpace[0].split(":");
-            const [fileNameRight, idRight] = splitedWithSpace[2].split(
-              ":",
+          if (splitedWithSpace[1] === "-->") {
+            matrixTmp.register_arrow(
+              fileNameLeft,
+              idLeft,
+              fileNameRight,
+              idRight,
+              description,
+              "〇",
             );
-
-            let description;
-            // コメントの抽出(簡易版)
-            if (line.includes("'")) {
-              description = line.slice(line.lastIndexOf("'")).slice(1).trim();
-            } else {
-              description = "";
-            }
-
-            if (splitedWithSpace[1] === "-->") {
-              matrixTmp.register_arrow(
-                fileNameLeft,
-                idLeft,
-                fileNameRight,
-                idRight,
-                description,
-                "〇",
-              );
-            } else if (splitedWithSpace[1] === "<--") {
-              matrixTmp.register_arrow(
-                fileNameRight,
-                idRight,
-                fileNameLeft,
-                idLeft,
-                description,
-                "〇",
-              );
-            }
+          } else if (splitedWithSpace[1] === "<--") {
+            matrixTmp.register_arrow(
+              fileNameRight,
+              idRight,
+              fileNameLeft,
+              idLeft,
+              description,
+              "〇",
+            );
           }
-
-          lineNum += 1;
         }
+
+        lineNum += 1;
       }
+    }
 
-      setTablePageInfo(
-        new TablePageInfo(matrixTmp, headerInfo, readTableFilePath),
-      );
-    };
-
-    useEffect(() => {
-      if (!hasRun.current) {
-        hasRun.current = true;
-        initialize();
-      }
-      
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // 空の依存配列により、コンポーネントのマウント時にのみ実行される
-    return (
-      <div className="mx-2">
-        <p className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
-          {path}
-        </p>
-        {
-          new Table(
-            tablePageInfo,
-            dblClickedData,
-            setTablePageInfo,
-            setDblClickedData,
-          ).asJsx()
-        }
-        <button
-          onClick={async () => {
-            await writeToTableFile(tablePageInfo);
-          }}
-        >
-          保存
-        </button>
-      </div>
+    setTablePageInfo(
+      new TablePageInfo(matrixTmp, headerInfo, readTableFilePath, false),
     );
+  };
+
+  useEffect(() => {
+    if (!hasRun.current) {
+      hasRun.current = true;
+      initialize();
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 空の依存配列により、コンポーネントのマウント時にのみ実行される
+  return (
+    <div className="mx-2">
+      <p className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
+        {path}
+      </p>
+      {new Table(
+        tablePageInfo,
+        dblClickedData,
+        setTablePageInfo,
+        setDblClickedData,
+      ).asJsx()}
+      <button
+        onClick={async () => {
+          await writeToTableFile(tablePageInfo);
+        }}
+      >
+        保存
+      </button>
+    </div>
+  );
 };

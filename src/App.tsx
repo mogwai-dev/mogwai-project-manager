@@ -67,9 +67,6 @@ function App() {
     const listFilePathes = await getListFileNames(filePath);
 
     for (const path of listFilePathes) {
-      const text = await readTextFile(
-        path, /* { baseDir: BaseDirectory.AppConfig } */
-      );
       tabsTmp.push({
         representName: await getFileNameFromPath(path),
         svgPathD:
