@@ -46,7 +46,6 @@ async function writeToTableFile(
 
   for (const rowKey in tablePageInfo.matrix.matrix) {
     for (const colKey in tablePageInfo.matrix.matrix[rowKey]) {
-      console.log(rowKey, colKey);
       if (
         tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "" &&
         tablePageInfo.matrix.matrix[rowKey][colKey].mark !== "-"

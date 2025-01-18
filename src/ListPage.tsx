@@ -11,7 +11,10 @@ export const ListPage: FC<ListPageProp> = ({ path }) => {
 
   const hasRun = useRef(false);
   useEffect(() => {
+    
+    console.log(`${path} の useEffect`)
     const initialize: () => Promise<void> = async () => {
+      
       const text = await readTextFile(
         path, /* { baseDir: BaseDirectory.AppConfig } */
       );

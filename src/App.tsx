@@ -66,18 +66,18 @@ function App() {
 
     const listFilePathes = await getListFileNames(filePath);
 
-    for (const path of listFilePathes) {
+    for (const [index, path] of listFilePathes.entries()) {
       tabsTmp.push({
         representName: await getFileNameFromPath(path),
         svgPathD:
           "M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 13a8.949 8.949 0 0 1-4.951-1.488A3.987 3.987 0 0 1 9 13h2a3.987 3.987 0 0 1 3.951 3.512A8.949 8.949 0 0 1 10 18Z",
-        Page: <ListPage path={path} />
+        Page: <ListPage key={`list_page_${index}`} path={path} />
       });
     }
 
     const tableFileName = await getTableFileNames(filePath);
 
-    for (const path of tableFileName) {
+    for (const [index, path] of tableFileName.entries()) {
       await readTextFile(
         path,
       );
@@ -85,7 +85,7 @@ function App() {
         representName: await getFileNameFromPath(path),
         svgPathD:
           "M16 1h-3.278A1.992 1.992 0 0 0 11 0H7a1.993 1.993 0 0 0-1.722 1H2a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2Zm-3 14H5a1 1 0 0 1 0-2h8a1 1 0 0 1 0 2Zm0-4H5a1 1 0 0 1 0-2h8a1 1 0 1 1 0 2Zm0-5H5a1 1 0 0 1 0-2h2V2h4v2h2a1 1 0 1 1 0 2Z",
-        Page: <TablePage path={path} />
+        Page: <TablePage key={`table_page_${index}`} path={path} />
       });
     }
     // 可能な限り 1 回で配列を更新
