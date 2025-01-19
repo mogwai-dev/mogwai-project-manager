@@ -1,4 +1,7 @@
 use glob;
+use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fs::File;
 use std::path::Path;
 
 #[tauri::command]
@@ -62,7 +65,6 @@ fn get_table_file_names(setting_dir_path: &str) -> Vec<String> {
     return ret;
 }
 
-
 #[tauri::command]
 fn get_file_name_from_path(path: &str) -> String {
     let path = Path::new(path);
@@ -73,9 +75,37 @@ fn get_file_name_from_path(path: &str) -> String {
         } else {
         }
     } else {
-
     }
     s
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Record {
+    id: String,
+    summary: String,
+    filename_or_path: String,
+    description: String,
+}
+
+fn read_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Record>, Box<dyn Error>> {
+    let file = File::open(path)?;
+    let mut rdr = csv::Reader::from_reader(file);
+    let mut records = Vec::new();
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        records.push(record);
+    }
+    Ok(records)
+}
+
+fn write_csv_file<P: AsRef<Path>>(path: P, records: &[Record]) -> Result<(), Box<dyn Error>> {
+    let file = File::create(path)?;
+    let mut wtr = csv::Writer::from_writer(file);
+    for record in records {
+        wtr.serialize(record)?;
+    }
+    wtr.flush()?;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

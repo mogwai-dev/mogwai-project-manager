@@ -1,6 +1,6 @@
 [package]
 name = "mogwai-project-manager"
-version = "0.2.1"
+version = "0.2.2"
 description = "project manager for mogwai"
 authors = ["you"]
 edition = "2021"
@@ -25,4 +25,5 @@ serde_json = "1"
 tauri-plugin-dialog = "2"
 glob = "0.3.1"
 tauri-plugin-fs = "2.2.0"
+csv = "1.1"
 
