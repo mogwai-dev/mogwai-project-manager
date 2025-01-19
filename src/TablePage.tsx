@@ -7,30 +7,11 @@ import {
   useState,
 } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
 import { Tooltip } from "react-tooltip";
 import MyTooltip from "./MyTooltip";
+import { ListFileChooser } from "./ListFileChooser";
+import { extractHeaderElement, getDir, HeaderElement, joinPath } from "./util";
 
-// デバッグ用制御変数
-const SHOW_TABLE_INFO: boolean = true;
-
-// 設定ディレクトリ内のファイルをすべて読み込む(*.list と *.table)
-async function getDir(path: string): Promise<string> {
-  const ret = await invoke<string>("get_dir", {
-    path,
-  });
-
-  return ret;
-}
-
-async function joinPath(dirPath: string, fileName: string): Promise<string> {
-  const ret = await invoke<string>("join_path", {
-    dirPath,
-    fileName,
-  });
-
-  return ret;
-}
 
 async function writeToTableFile(
   tablePageInfo: TablePageInfo,
@@ -741,54 +722,6 @@ class Table {
   }
 }
 
-class HeaderElement {
-  file_name: string;
-  id: string; // unique な数値
-  represent_name: string; // 表示する名前
-
-  constructor(file_name: string, id: string, represent_name: string) {
-    this.file_name = file_name;
-    this.id = id;
-    this.represent_name = represent_name;
-  }
-
-  matrixKey(): string {
-    return `${this.file_name}:${this.id}`;
-  }
-
-  debug_repr(): string {
-    return `${this.id}:${this.represent_name}`;
-  }
-
-  // ヘッダーに表示される文字列を取得する
-  repr(): string {
-    return !SHOW_TABLE_INFO ? this.represent_name : this.debug_repr();
-  }
-}
-
-// ヘッダーとなる部分を抽出する
-function extractHeaderElement(
-  file_name: string,
-  list_text: string,
-): HeaderElement[] {
-  const lines = list_text.split("\n").map((line) => line.trim());
-  const words_splited_with_comma = lines
-    .map<string[]>((v) => v.split(","))
-    .map<string[]>((v) => v.map<string>((vv) => vv.trim()));
-
-  const id_and_key: HeaderElement[] = words_splited_with_comma.map<
-    HeaderElement
-  >((v) => {
-    return new HeaderElement(
-      file_name, // file_name
-      v[0], // id
-      v[v.length - 1], // represent_name
-    );
-  });
-
-  return id_and_key;
-}
-
 // matrix["x.list:1"]["y.list:1"] = 'o' みたいな....
 type MatrixValue = { mark: string; description: string; shouldPaintSelf: boolean };
 class Matrix {
@@ -878,13 +811,13 @@ class Matrix {
   }
 }
 
-type HeaderInfo = Map<
+export type HeaderInfo = Map<
   string,
   { headerElements: HeaderElement[]; isRowOpen: boolean; isColOpen: boolean }
 >;
 
 // 読み込んだテーブルファイルの情報
-class TablePageInfo {
+export class TablePageInfo {
   matrix: Matrix; // ヘッダーを含まない行列の値
   headerInfo: HeaderInfo;
   tableFilePath: string;
@@ -1035,12 +968,14 @@ export const TablePage: FC<TablePageProp> = ({ path }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+
   // 空の依存配列により、コンポーネントのマウント時にのみ実行される
   return (
     <div className="mx-2">
       <p className="block my-1 text-sm font-medium text-gray-900 dark:text-white">
         {path}
       </p>
+      <ListFileChooser initialFilePathes={Array.from(tablePageInfo.headerInfo.keys())} setTablePageInfo={setTablePageInfo} oldFileNames={Array.from(tablePageInfo.headerInfo.keys())} path={path} tablePageInfoNow={tablePageInfo}/>
       {new Table(
         tablePageInfo,
         dblClickedData,
